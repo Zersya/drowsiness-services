@@ -1,6 +1,6 @@
 # Core ML/CV dependencies
-torch>=2.0.0
-torchvision>=0.15.0
+# torch>=2.0.0
+# torchvision>=0.15.0
 ultralytics>=8.0.0
 opencv-python>=4.8.0
 numpy>=1.24.0
@@ -31,9 +31,3 @@ sqlite3>=3.35.0
 --extra-index-url https://download.pytorch.org/whl/cu118
 torch>=2.0.0+cu118
 torchvision>=0.15.0+cu118
-
-# Development and testing (optional)
-pytest>=7.4.0
-black>=23.7.0
-flake8>=6.1.0
-isort>=5.12.0
