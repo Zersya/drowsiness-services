@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drowsiness Detection Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
+    <style>
+        .stats-card {
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+        .table-responsive {
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+        }
+        .drowsy-true {
+            background-color: #dc3545;
+            color: white;
+        }
+        .drowsy-false {
+            background-color: #198754;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">Drowsiness Detection Dashboard</span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card card bg-primary text-white p-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Events</h5>
+                        <h2 class="card-text">{{ stats.total_events }}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card card bg-warning text-dark p-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Drowsy Events</h5>
+                        <h2 class="card-text">{{ stats.drowsy_events }}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card card bg-success text-white p-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Unique Devices</h5>
+                        <h2 class="card-text">{{ stats.unique_devices }}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card card bg-info text-white p-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Active Fleets</h5>
+                        <h2 class="card-text">{{ stats.unique_fleets }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Events Table -->
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Recent Events</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Device</th>
+                                <th>Fleet</th>
+                                <th>Time</th>
+                                <th>Event Type</th>
+                                <th>Location</th>
+                                <th>Speed</th>
+                                <th>Drowsy</th>
+                                <th>Yawns</th>
+                                <th>Eyes Closed</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for event in evidence_results %}
+                            <tr>
+                                <td>{{ event.device_name }}</td>
+                                <td>{{ event.fleet_name }}</td>
+                                <td>{{ event.alarm_time }}</td>
+                                <td>{{ event.alarm_type_value }}</td>
+                                <td>{{ event.location }}</td>
+                                <td>{{ event.speed }} km/h</td>
+                                <td>
+                                    <span class="status-badge {% if event.is_drowsy %}drowsy-true{% else %}drowsy-false{% endif %}">
+                                        {{ "Yes" if event.is_drowsy else "No" }}
+                                    </span>
+                                </td>
+                                <td>{{ event.yawn_count or 0 }}</td>
+                                <td>{{ event.eye_closed_frames or 0 }}</td>
+                                <td>
+                                    <span class="badge {% if event.processing_status == 'processed' %}bg-success{% elif event.processing_status == 'failed' %}bg-danger{% else %}bg-warning{% endif %}">
+                                        {{ event.processing_status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
