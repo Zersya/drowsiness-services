@@ -32,6 +32,20 @@
             background-color: #198754;
             color: white;
         }
+        .time-info {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .time-info .label {
+            font-weight: bold;
+            color: #6c757d;
+        }
+        .time-info .value {
+            color: #212529;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -42,6 +56,16 @@
     </nav>
 
     <div class="container mt-4">
+        <!-- Time Information -->
+        <div class="time-info">
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="label">Last Fetch Time:</div>
+                    <div class="value">{{ last_fetch_time.strftime('%Y-%m-%d %H:%M:%S') if last_fetch_time else 'No fetch recorded' }}</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Statistics Cards -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -73,6 +97,34 @@
                     <div class="card-body">
                         <h5 class="card-title">Active Fleets</h5>
                         <h2 class="card-text">{{ stats.unique_fleets }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processing Status Cards -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="stats-card card bg-success text-white p-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Processed</h5>
+                        <h2 class="card-text">{{ stats.processed_events }}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stats-card card bg-warning text-dark p-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Pending</h5>
+                        <h2 class="card-text">{{ stats.pending_events }}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stats-card card bg-danger text-white p-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Failed</h5>
+                        <h2 class="card-text">{{ stats.failed_events }}</h2>
                     </div>
                 </div>
             </div>

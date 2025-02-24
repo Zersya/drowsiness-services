@@ -19,6 +19,16 @@ def index():
     try:
         conn = get_db_connection()
         
+        # Get latest fetch time
+        cursor = conn.execute('''
+            SELECT last_fetch_time 
+            FROM fetch_state 
+            ORDER BY id DESC 
+            LIMIT 1
+        ''')
+        last_fetch = cursor.fetchone()
+        last_fetch_time = datetime.fromisoformat(last_fetch['last_fetch_time']) if last_fetch else None
+
         # Get latest evidence results
         cursor = conn.execute('''
             SELECT 
@@ -45,7 +55,10 @@ def index():
                 COUNT(*) as total_events,
                 SUM(CASE WHEN is_drowsy = 1 THEN 1 ELSE 0 END) as drowsy_events,
                 COUNT(DISTINCT device_id) as unique_devices,
-                COUNT(DISTINCT fleet_name) as unique_fleets
+                COUNT(DISTINCT fleet_name) as unique_fleets,
+                SUM(CASE WHEN processing_status = 'processed' THEN 1 ELSE 0 END) as processed_events,
+                SUM(CASE WHEN processing_status = 'pending' THEN 1 ELSE 0 END) as pending_events,
+                SUM(CASE WHEN processing_status = 'failed' THEN 1 ELSE 0 END) as failed_events
             FROM evidence_results
         ''')
         stats = cursor.fetchone()
@@ -54,7 +67,8 @@ def index():
         
         return render_template('dashboard.html', 
                              evidence_results=evidence_results,
-                             stats=stats)
+                             stats=stats,
+                             last_fetch_time=last_fetch_time)
                              
     except Exception as e:
         return f"Error: {str(e)}", 500
