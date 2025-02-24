@@ -1,33 +1,10 @@
-# Core ML/CV dependencies
-# torch>=2.0.0
-# torchvision>=0.15.0
-ultralytics>=8.0.0
-opencv-python>=4.8.0
-numpy>=1.24.0
-
-# Image processing
-Pillow>=10.0.0
-
-# API and HTTP handling
-requests>=2.31.0
-urllib3>=2.0.0
-
-# Configuration and environment
-python-dotenv>=1.0.0
-pyyaml>=6.0.1
-
-# Date/Time handling
-pytz>=2023.3
-python-dateutil>=2.8.2
-
-# Logging and monitoring
-logging>=0.5.1.2
-
-# Database
-sqlite3>=3.35.0
-
-# Optional but recommended for better performance
-# Note: CUDA toolkit should be installed separately
---extra-index-url https://download.pytorch.org/whl/cu118
-torch>=2.0.0+cu118
-torchvision>=0.15.0+cu118
+requests 
+opencv-python 
+python-dotenv 
+ultralytics 
+torch 
+torchvision
+requests 
+opencv-python 
+python-dotenv 
+schedule
