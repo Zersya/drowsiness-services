@@ -1,10 +1,7 @@
-requests 
-opencv-python 
-python-dotenv 
-ultralytics 
-torch 
+requests
+opencv-python
+python-dotenv
+ultralytics
+torch
 torchvision
-requests 
-opencv-python 
-python-dotenv 
 schedule
