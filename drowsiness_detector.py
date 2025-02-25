@@ -11,6 +11,7 @@ from ultralytics import YOLO
 import json
 from urllib.parse import urljoin
 import hashlib
+from drowsiness_analyzer import create_analyzer
 
 # Set up logging first
 logging.basicConfig(
@@ -614,15 +615,22 @@ def perform_yolo_detection(frame, model):
 
 
 def analyze_drowsiness(yawn_count, eye_closed_frames, total_frames_processed):
-    """Analyzes detection counts to determine drowsiness."""
-    logging.info(f"Analyzing drowsiness: Yawns={yawn_count}, Eye Closed Frames={eye_closed_frames}, Total Frames={total_frames_processed}")
-    if yawn_count > DROWSINESS_THRESHOLD_YAWN:
-        logging.warning("Drowsiness detected: Excessive yawning!")
-        return True
-    if eye_closed_frames > DROWSINESS_THRESHOLD_EYE_CLOSED: # You might want to normalize this by frame rate/total frames
-        logging.warning("Drowsiness detected: Prolonged eye closure!")
-        return True
-    return False # Not drowsy based on thresholds
+    """Analyzes detection counts to determine drowsiness using the configured analyzer."""
+    analyzer = create_analyzer(
+        analyzer_type="threshold",
+        yawn_threshold=DROWSINESS_THRESHOLD_YAWN,
+        eye_closed_threshold=DROWSINESS_THRESHOLD_EYE_CLOSED
+    )
+    
+    result = analyzer.analyze(yawn_count, eye_closed_frames, total_frames_processed)
+    
+    if result['is_drowsy']:
+        logging.warning(
+            f"Drowsiness detected with {result['confidence']*100:.1f}% confidence!\n"
+            f"Details: {result['details']}"
+        )
+    
+    return result['is_drowsy']
 
 def update_evidence_result(evidence_id, detection_results):
     """Updates an existing evidence record with detection results."""
