@@ -56,7 +56,9 @@ def index():
                 er.yawn_count,
                 er.eye_closed_frames,
                 er.processing_status,
-                er.fleet_name
+                er.fleet_name,
+                er.takeup_memo,
+                er.takeup_time
             FROM evidence_results er
             ORDER BY er.alarm_time DESC
             LIMIT ? OFFSET ?

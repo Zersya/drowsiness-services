@@ -141,7 +141,6 @@
                         <thead>
                             <tr>
                                 <th>Device</th>
-                                <th>Fleet</th>
                                 <th>Time</th>
                                 <th>Event Type</th>
                                 <th>Location</th>
@@ -150,13 +149,14 @@
                                 <th>Yawns</th>
                                 <th>Eyes Closed</th>
                                 <th>Status</th>
+                                <th>Takeup Memo</th>
+                                <th>Takeup Time</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for event in evidence_results %}
                             <tr>
                                 <td>{{ event.device_name }}</td>
-                                <td>{{ event.fleet_name }}</td>
                                 <td>{{ event.alarm_time }}</td>
                                 <td>{{ event.alarm_type_value }}</td>
                                 <td>{{ event.location }}</td>
@@ -173,6 +173,8 @@
                                         {{ event.processing_status }}
                                     </span>
                                 </td>
+                                <td>{{ event.takeup_memo if event.takeup_memo else '-' }}</td>
+                                <td>{{ event.takeup_time if event.takeup_time else '-' }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>

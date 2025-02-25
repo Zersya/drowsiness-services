@@ -79,7 +79,9 @@ def init_database():
                     processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     fleet_name TEXT,
                     alarm_guid TEXT UNIQUE,
-                    processing_status TEXT DEFAULT 'pending'
+                    processing_status TEXT DEFAULT 'pending',
+                    takeup_memo TEXT,
+                    takeup_time TIMESTAMP
                 )
             ''')
             
@@ -160,8 +162,9 @@ def store_evidence_result(evidence_data, detection_results=None):
                     device_id, device_name, alarm_type, alarm_type_value,
                     alarm_time, location, speed, video_url, image_url,
                     is_drowsy, yawn_count, eye_closed_frames,
-                    fleet_name, alarm_guid, processing_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    fleet_name, alarm_guid, processing_status,
+                    takeup_memo, takeup_time
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 evidence_data.get('deviceID'),
                 evidence_data.get('deviceName'),
@@ -177,7 +180,9 @@ def store_evidence_result(evidence_data, detection_results=None):
                 detection_results.get('eye_closed_frames') if detection_results else None,
                 evidence_data.get('fleetName'),
                 evidence_data.get('alarmGuid'),
-                processing_status
+                processing_status,
+                evidence_data.get('takeupMemo'),
+                evidence_data.get('takeupTime')
             ))
             
             evidence_id = cursor.lastrowid
@@ -400,6 +405,9 @@ def fetch_video_evidence(start_time, end_time, retry_count=0):
                         'alarmTypeValue': evidence.get('alarmTypeValue'),
                         'location': evidence.get('location'),
                         'speed': evidence.get('speed'),
+                        'takeupMemo': evidence.get('takeupMemo'),
+                        'takeupTime': evidence.get('takeupTime'),
+                        'alarmTime': evidence.get('alarmTime'),
                         'files': []
                     }
                     
