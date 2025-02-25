@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Add max and min functions to template context
 app.jinja_env.globals.update(max=max, min=min)
 
-DB_PATH = "fetch_state.db"  # Same as in drowsiness_detector.py
+DB_PATH = "drowsiness_detection.db"  # Same as in drowsiness_detector.py
 
 def get_db_connection():
     """Create a database connection."""
