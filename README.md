@@ -2,6 +2,12 @@
 
 A service that analyzes video feeds to detect driver drowsiness using computer vision and customizable analysis algorithms.
 
+## Requirements
+
+- Python 3.12 or higher
+- pip package manager
+- Virtual environment (recommended)
+
 ## How to use
 
 1. Clone the repository: `git clone https://github.com/yourusername/drowsiness-detection-service.git`
