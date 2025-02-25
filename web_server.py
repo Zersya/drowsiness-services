@@ -1,9 +1,13 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 import sqlite3
 from datetime import datetime
 import os
+import math
 
 app = Flask(__name__)
+
+# Add max and min functions to template context
+app.jinja_env.globals.update(max=max, min=min)
 
 DB_PATH = "fetch_state.db"  # Same as in drowsiness_detector.py
 
@@ -19,6 +23,11 @@ def index():
     try:
         conn = get_db_connection()
         
+        # Pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = 10  # Number of items per page
+        offset = (page - 1) * per_page
+        
         # Get latest fetch time
         cursor = conn.execute('''
             SELECT last_fetch_time 
@@ -29,7 +38,12 @@ def index():
         last_fetch = cursor.fetchone()
         last_fetch_time = datetime.fromisoformat(last_fetch['last_fetch_time']) if last_fetch else None
 
-        # Get latest evidence results
+        # Get total count of evidence results
+        cursor = conn.execute('SELECT COUNT(*) as total FROM evidence_results')
+        total_records = cursor.fetchone()['total']
+        total_pages = math.ceil(total_records / per_page)
+
+        # Get paginated evidence results
         cursor = conn.execute('''
             SELECT 
                 er.device_name,
@@ -45,11 +59,11 @@ def index():
                 er.fleet_name
             FROM evidence_results er
             ORDER BY er.alarm_time DESC
-            LIMIT 50
-        ''')
+            LIMIT ? OFFSET ?
+        ''', (per_page, offset))
         evidence_results = cursor.fetchall()
         
-        # Get some basic statistics
+        # Get statistics
         cursor = conn.execute('''
             SELECT 
                 COUNT(*) as total_events,
@@ -68,42 +82,16 @@ def index():
         return render_template('dashboard.html', 
                              evidence_results=evidence_results,
                              stats=stats,
-                             last_fetch_time=last_fetch_time)
+                             last_fetch_time=last_fetch_time,
+                             pagination={
+                                 'page': page,
+                                 'per_page': per_page,
+                                 'total_pages': total_pages,
+                                 'total_records': total_records
+                             })
                              
     except Exception as e:
         return f"Error: {str(e)}", 500
 
-@app.route('/api/events')
-def get_events():
-    """API endpoint to get events data."""
-    try:
-        conn = get_db_connection()
-        cursor = conn.execute('''
-            SELECT 
-                er.*,
-                ef.file_type,
-                ef.file_url
-            FROM evidence_results er
-            LEFT JOIN evidence_files ef ON er.id = ef.evidence_id
-            ORDER BY er.alarm_time DESC
-            LIMIT 100
-        ''')
-        events = cursor.fetchall()
-        conn.close()
-        
-        # Convert rows to dictionaries
-        events_list = []
-        for event in events:
-            event_dict = dict(event)
-            # Convert datetime to string for JSON serialization
-            if event_dict['alarm_time']:
-                event_dict['alarm_time'] = datetime.fromisoformat(event_dict['alarm_time']).strftime('%Y-%m-%d %H:%M:%S')
-            events_list.append(event_dict)
-            
-        return jsonify(events_list)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=4848, debug=True)
+    app.run(debug=True)

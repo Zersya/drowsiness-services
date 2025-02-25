@@ -105,7 +105,7 @@ def init_database():
 
 def get_last_fetch_time():
     """Retrieve the last fetch time from the database."""
-    # return datetime.datetime.now() - datetime.timedelta(minutes=30)
+    return datetime.datetime.now() - datetime.timedelta(minutes=30)
     
     try:
         with sqlite3.connect(DB_PATH) as conn:
