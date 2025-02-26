@@ -2,4 +2,6 @@
 *.pt
 *.log
 *.db
+*.pyc
+*.mp4
 .rules

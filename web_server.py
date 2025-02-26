@@ -71,14 +71,18 @@ def index():
         total_pages = math.ceil(total_records / per_page)
 
         # Get paginated evidence results with filters applied
+        # Update the query to include video_url in the results
         results_query = f'''
             SELECT 
+                er.id,
+                er.device_id,
                 er.device_name,
                 er.alarm_type,
                 er.alarm_type_value,
                 er.alarm_time,
                 er.location,
                 er.speed,
+                er.video_url,
                 er.is_drowsy,
                 er.yawn_count,
                 er.eye_closed_frames,

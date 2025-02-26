@@ -46,6 +46,52 @@
         .time-info .value {
             color: #212529;
         }
+        .action-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+        /* Video modal styles */
+        .video-modal .modal-dialog {
+            max-width: 800px;
+        }
+        .video-modal .modal-content {
+            background-color: #212529;
+            color: white;
+        }
+        .video-modal .modal-header {
+            border-bottom: 1px solid #343a40;
+        }
+        .video-modal .modal-footer {
+            border-top: 1px solid #343a40;
+        }
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            height: 0;
+            overflow: hidden;
+            background-color: #000;
+            border-radius: 4px;
+        }
+        .video-container video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .video-info {
+            background-color: #343a40;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .video-info-item {
+            margin-bottom: 8px;
+        }
+        .video-info-label {
+            font-weight: bold;
+            color: #adb5bd;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -178,6 +224,7 @@
                                 <th>Take Type</th>
                                 <th>Memo</th>
                                 <th>Time</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -210,6 +257,16 @@
                                 </td>
                                 <td>{{ event.takeup_memo if event.takeup_memo else '-' }}</td>
                                 <td>{{ event.takeup_time if event.takeup_time else '-' }}</td>
+                                <td>
+                                    {% if event.video_url %}
+                                        <button type="button" class="btn btn-sm btn-primary action-btn" 
+                                                onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }})">
+                                            <i class="bx bx-play"></i> Play Video
+                                        </button>
+                                    {% else %}
+                                        <span class="text-muted">No video</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -262,78 +319,169 @@
         </div>
     </div>
 
+    <!-- Video Modal -->
+    <div class="modal fade video-modal" id="videoModal" tabindex="-1" aria-labelledby="videoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="videoModalLabel">Video Playback</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="video-container">
+                        <video id="videoPlayer" controls>
+                            <source src="" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+                    <div class="video-info">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="video-info-item">
+                                    <span class="video-info-label">Device:</span>
+                                    <span id="videoDeviceName"></span>
+                                </div>
+                                <div class="video-info-item">
+                                    <span class="video-info-label">Time:</span>
+                                    <span id="videoTime"></span>
+                                </div>
+                                <div class="video-info-item">
+                                    <span class="video-info-label">Event Type:</span>
+                                    <span id="videoEventType"></span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="video-info-item">
+                                    <span class="video-info-label">Drowsy:</span>
+                                    <span id="videoDrowsy"></span>
+                                </div>
+                                <div class="video-info-item">
+                                    <span class="video-info-label">Yawns:</span>
+                                    <span id="videoYawns"></span>
+                                </div>
+                                <div class="video-info-item">
+                                    <span class="video-info-label">Eyes Closed:</span>
+                                    <span id="videoEyesClosed"></span>
+                                </div>
+                                <div class="video-info-item">
+                                    <span class="video-info-label">Take Type:</span>
+                                    <span id="videoTakeType"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a id="downloadButton" href="" class="btn btn-primary" download>
+                        <i class="bx bx-download"></i> Download Video
+                    </a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function handleAllEventsChange(checkbox) {
+            // If "All Events" is checked, uncheck other event types
+            if (checkbox.checked) {
+                document.querySelectorAll('.event-type-checkbox').forEach(cb => {
+                    cb.checked = false;
+                });
+            }
+        }
+
+        function handleEventTypeChange() {
+            // If any specific event type is checked, uncheck "All Events"
+            const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
+            if (anyEventTypeChecked) {
+                document.getElementById('allEvents').checked = false;
+            } else {
+                // If no specific event type is checked, check "All Events"
+                document.getElementById('allEvents').checked = true;
+            }
+        }
+
+        // Video modal functions
+        function openVideoModal(videoUrl, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType) {
+            // Set video source
+            const videoPlayer = document.getElementById('videoPlayer');
+            videoPlayer.src = videoUrl;
+            
+            // Set download link
+            const downloadButton = document.getElementById('downloadButton');
+            downloadButton.href = videoUrl;
+            
+            // Set video info
+            document.getElementById('videoDeviceName').textContent = deviceName;
+            document.getElementById('videoTime').textContent = time;
+            document.getElementById('videoEventType').textContent = eventType;
+            document.getElementById('videoDrowsy').textContent = isDrowsy;
+            document.getElementById('videoYawns').textContent = yawns;
+            document.getElementById('videoEyesClosed').textContent = eyesClosed;
+            document.getElementById('videoTakeType').textContent = takeType === 0 ? "True Alarm" : 
+                                                                  takeType === 1 ? "False Alarm" : "-";
+            
+            // Show modal
+            const videoModal = new bootstrap.Modal(document.getElementById('videoModal'));
+            videoModal.show();
+            
+            // Auto-play video when modal is shown
+            document.getElementById('videoModal').addEventListener('shown.bs.modal', function () {
+                videoPlayer.play().catch(e => {
+                    console.log('Auto-play prevented by browser:', e);
+                });
+            });
+            
+            // Pause video when modal is closed
+            document.getElementById('videoModal').addEventListener('hidden.bs.modal', function () {
+                videoPlayer.pause();
+                videoPlayer.currentTime = 0;
+            });
+        }
+
+        // Initial check on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set default behavior - check both specific event types if nothing is selected
+            const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
+            const allEventsChecked = document.getElementById('allEvents').checked;
+            
+            if (!anyEventTypeChecked && !allEventsChecked) {
+                document.querySelectorAll('.event-type-checkbox').forEach(cb => {
+                    cb.checked = true;
+                });
+                document.getElementById('allEvents').checked = false;
+            }
+            
+            handleEventTypeChange();
+        });
+    </script>
+    <style>
+        /* Filter controls styling */
+        .filter-controls {
+            display: flex;
+            align-items: center;
+        }
+        
+        .filter-controls .form-check-input {
+            background-color: #343a40;
+            border-color: #6c757d;
+        }
+        
+        .filter-controls .form-check-input:checked {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        
+        .filter-controls .form-check-label {
+            font-size: 0.9rem;
+        }
+        
+        .filter-controls .btn-outline-light {
+            font-size: 0.85rem;
+            padding: 0.25rem 0.5rem;
+        }
+    </style>
 </body>
 </html>
-
-<script>
-    function handleAllEventsChange(checkbox) {
-        // If "All Events" is checked, uncheck other event types
-        if (checkbox.checked) {
-            document.querySelectorAll('.event-type-checkbox').forEach(cb => {
-                cb.checked = false;
-            });
-        }
-    }
-
-    function handleEventTypeChange() {
-        // If any specific event type is checked, uncheck "All Events"
-        const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
-        if (anyEventTypeChecked) {
-            document.getElementById('allEvents').checked = false;
-        } else {
-            // If no specific event type is checked, check "All Events"
-            document.getElementById('allEvents').checked = true;
-        }
-    }
-
-    // Initial check on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        // Set default behavior - check both specific event types if nothing is selected
-        const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
-        const allEventsChecked = document.getElementById('allEvents').checked;
-        
-        if (!anyEventTypeChecked && !allEventsChecked) {
-            document.querySelectorAll('.event-type-checkbox').forEach(cb => {
-                cb.checked = true;
-            });
-            document.getElementById('allEvents').checked = false;
-        }
-        
-        handleEventTypeChange();
-    });
-</script>
-
-<style>
-    /* Filter controls styling */
-    .filter-controls {
-        display: flex;
-        align-items: center;
-    }
-    
-    .filter-controls .form-check-input {
-        background-color: #343a40;
-        border-color: #6c757d;
-    }
-    
-    .filter-controls .form-check-input:checked {
-        background-color: #0d6efd;
-        border-color: #0d6efd;
-    }
-    
-    .filter-controls .form-check-label {
-        font-size: 0.9rem;
-    }
-    
-    .filter-controls .btn-outline-light {
-        font-size: 0.85rem;
-        padding: 0.25rem 0.5rem;
-    }
-</style>
-
-
-
-
-
-
-
