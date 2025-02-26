@@ -61,7 +61,7 @@ class ThresholdBasedAnalyzer(DrowsinessAnalyzer):
 class RateBasedAnalyzer(DrowsinessAnalyzer):
     """Rate-based drowsiness analysis using eye closure percentage and yawn frequency."""
     
-    def __init__(self, eye_closed_percentage_threshold=90, yawn_rate_threshold=25, fps=30):
+    def __init__(self, eye_closed_percentage_threshold=20, yawn_rate_threshold=3, fps=30):
         """
         Initialize the analyzer with thresholds and frame rate.
         
@@ -127,6 +127,77 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
             }
         }
         
+        
+import math
+import logging
+
+class ProbabilisticAnalyzer(DrowsinessAnalyzer):
+    """Probabilistic drowsiness analysis using a sigmoid function."""
+    
+    def __init__(self, a=0.5, b=5, c=3, fps=30):
+        """
+        Initialize the analyzer with parameters for the sigmoid function.
+        
+        Args:
+            a (float): Weight for yawn rate
+            b (float): Weight for eye closure ratio
+            c (float): Threshold parameter
+            fps (int): Frames per second for time calculations
+        """
+        self.a = a  # Weight for yawn rate
+        self.b = b  # Weight for eye closure ratio
+        self.c = c  # Threshold shift for the sigmoid
+        self.fps = fps  # Frames per second
+
+    def analyze(self, yawn_count, eye_closed_frames, total_frames):
+        """
+        Analyze drowsiness based on yawn rate and eye closure ratio using a sigmoid function.
+        
+        Args:
+            yawn_count (int): Number of yawns detected
+            eye_closed_frames (int): Number of frames with closed eyes
+            total_frames (int): Total number of frames processed
+            
+        Returns:
+            dict: Analysis results with is_drowsy, confidence, and details
+        """
+        logging.info(f"Analyzing drowsiness: Yawns={yawn_count}, Eye Closed Frames={eye_closed_frames}, Total Frames={total_frames}")
+        
+        # Handle edge case where no frames are processed
+        if total_frames == 0:
+            return {
+                'is_drowsy': False,
+                'confidence': 0.0,
+                'details': {
+                    'probability': 0.0
+                }
+            }
+
+        # Calculate time-based metrics
+        time_in_seconds = total_frames / self.fps
+        time_in_minutes = time_in_seconds / 60
+        yawn_rate = yawn_count / time_in_minutes if time_in_minutes > 0 else 0
+        eye_closed_ratio = eye_closed_frames / total_frames
+
+        # Calculate the linear combination
+        linear_comb = self.a * yawn_rate + self.b * eye_closed_ratio
+
+        # Calculate the probability using sigmoid
+        probability = 1 / (1 + math.exp(-(linear_comb - self.c)))
+
+        # Determine drowsiness based on probability > 0.5
+        is_drowsy = probability > 0.5
+
+        return {
+            'is_drowsy': is_drowsy,
+            'confidence': probability,
+            'details': {
+                'yawn_rate': yawn_rate,
+                'eye_closed_ratio': eye_closed_ratio,
+                'probability': probability
+            }
+        }
+        
 # Factory function to create analyzers
 def create_analyzer(analyzer_type="threshold", **kwargs):
     """
@@ -144,9 +215,15 @@ def create_analyzer(analyzer_type="threshold", **kwargs):
         eye_closed_threshold = kwargs.get('eye_closed_threshold', 5)
         return ThresholdBasedAnalyzer(yawn_threshold, eye_closed_threshold)
     elif analyzer_type == "rate":
-        eye_closed_percentage_threshold = kwargs.get('eye_closed_percentage_threshold', 20)
-        yawn_rate_threshold = kwargs.get('yawn_rate_threshold', 3)
+        eye_closed_percentage_threshold = kwargs.get('eye_closed_percentage_threshold', 60)
+        yawn_rate_threshold = kwargs.get('yawn_rate_threshold', 10)
         fps = kwargs.get('fps', 30)
         return RateBasedAnalyzer(eye_closed_percentage_threshold, yawn_rate_threshold, fps)
+    elif analyzer_type == "probabilistic":
+        a = kwargs.get('a', 0.5)
+        b = kwargs.get('b', 5)
+        c = kwargs.get('c', 3)
+        fps = kwargs.get('fps', 30)
+        return ProbabilisticAnalyzer(a, b, c, fps)
     else:
         raise ValueError(f"Unknown analyzer type: {analyzer_type}")
