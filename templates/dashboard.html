@@ -218,8 +218,8 @@
                                 <th>Event Type</th>
                                 <th>Speed</th>
                                 <th>Drowsy</th>
-                                <th>Yawns</th>
-                                <th>Eyes Closed</th>
+                                <!-- <th>Yawns</th>
+                                <th>Eyes Closed</th> -->
                                 <th>Status</th>
                                 <th>Take Type</th>
                                 <th>Memo</th>
@@ -245,8 +245,8 @@
                                         </span>
                                     {% endif %}
                                 </td>
-                                <td>{{ event.yawn_count or 0 }}</td>
-                                <td>{{ event.eye_closed_frames or 0 }}</td>
+                                <!-- <td>{{ event.yawn_count or 0 }}</td>
+                                <td>{{ event.eye_closed_frames or 0 }}</td> -->
                                 <td>
                                     <span class="badge {% if event.processing_status == 'processed' %}bg-success{% elif event.processing_status == 'failed' %}bg-danger{% else %}bg-warning{% endif %}">
                                         {{ event.processing_status }}
