@@ -43,7 +43,8 @@ class DataManager:
                         alarm_guid TEXT UNIQUE,
                         processing_status TEXT DEFAULT 'pending',
                         takeup_memo TEXT,
-                        takeup_time TIMESTAMP
+                        takeup_time TIMESTAMP,
+                        takeType INTEGER
                     )
                 ''')
                 
@@ -68,6 +69,9 @@ class DataManager:
             raise
     
     def get_last_fetch_time(self):
+        """TODO: REMOVE THIS FOR PRODUCTION"""
+        return datetime.datetime.now() - datetime.timedelta(minutes=430)
+        
         """Retrieve the last fetch time from the database."""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -138,8 +142,8 @@ class DataManager:
                         alarm_time, location, speed, video_url, image_url,
                         is_drowsy, yawn_count, eye_closed_frames,
                         fleet_name, alarm_guid, processing_status,
-                        takeup_memo, takeup_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        takeup_memo, takeup_time, takeType
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     evidence_data.get('deviceID'),
                     evidence_data.get('deviceName'),
@@ -157,7 +161,8 @@ class DataManager:
                     evidence_data.get('alarmGuid'),
                     processing_status,
                     evidence_data.get('takeupMemo'),
-                    evidence_data.get('takeupTime')
+                    evidence_data.get('takeupTime'),
+                    evidence_data.get('takeType')
                 ))
                 
                 evidence_id = cursor.lastrowid
@@ -390,8 +395,8 @@ class DataManager:
             logging.error(f"Error deleting old records: {e}")
             return 0
     
-    def mark_evidence_as_reviewed(self, evidence_id, memo=None):
-        """Mark an evidence record as reviewed with an optional memo."""
+    def mark_evidence_as_reviewed(self, evidence_id, memo=None, take_type=None):
+        """Mark an evidence record as reviewed with an optional memo and take type."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -400,18 +405,27 @@ class DataManager:
                     UPDATE evidence_results
                     SET takeup_time = ?,
                         takeup_memo = ?
-                    WHERE id = ?
                 '''
                 
-                cursor.execute(update_query, (
+                params = [
                     datetime.datetime.now().isoformat(),
-                    memo,
-                    evidence_id
-                ))
+                    memo
+                ]
                 
+                # Add takeType to the update if provided
+                if take_type is not None:
+                    update_query += ", takeType = ?"
+                    params.append(take_type)
+                
+                update_query += " WHERE id = ?"
+                params.append(evidence_id)
+                
+                cursor.execute(update_query, params)
                 conn.commit()
+                
                 logging.info(f"Marked evidence ID {evidence_id} as reviewed")
                 return True
+                
         except sqlite3.Error as e:
             logging.error(f"Error marking evidence as reviewed: {e}")
             return False

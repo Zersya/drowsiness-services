@@ -2,7 +2,7 @@ import sqlite3
 import logging
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "fetch_state.db"
+DB_PATH = Path(__file__).parent.parent / "drowsiness_detection.db"
 
 def migrate():
     """Add takeup_memo, takeup_time, and alarm_time columns to evidence_results table."""

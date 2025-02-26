@@ -133,7 +133,34 @@
         <!-- Events Table -->
         <div class="card">
             <div class="card-header bg-dark text-white">
-                <h5 class="mb-0">Recent Events</h5>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Events</h5>
+                    <div class="filter-controls">
+                        <form method="get" class="d-flex align-items-center" id="filterForm">
+                            <div class="form-check form-check-inline me-2">
+                                <input class="form-check-input" type="checkbox" id="allEvents" name="event_type" value="all" 
+                                       {% if not filters.event_types or ('all' in filters.event_types and not 'yawning' in filters.event_types and not 'eye_closed' in filters.event_types) %}checked{% endif %}
+                                       onchange="handleAllEventsChange(this)">
+                                <label class="form-check-label text-white" for="allEvents">All Events</label>
+                            </div>
+                            <div class="form-check form-check-inline me-2">
+                                <input class="form-check-input event-type-checkbox" type="checkbox" id="yawningEvents" name="event_type" value="yawning" 
+                                       {% if not filters.event_types or 'yawning' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
+                                       onchange="handleEventTypeChange()">
+                                <label class="form-check-label text-white" for="yawningEvents">Yawning</label>
+                            </div>
+                            <div class="form-check form-check-inline me-2">
+                                <input class="form-check-input event-type-checkbox" type="checkbox" id="eyeClosedEvents" name="event_type" value="eye_closed" 
+                                       {% if not filters.event_types or 'eye_closed' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
+                                       onchange="handleEventTypeChange()">
+                                <label class="form-check-label text-white" for="eyeClosedEvents">Eye Closed</label>
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-outline-light ms-2">Apply Filters</button>
+                            <!-- Preserve pagination when filtering -->
+                            <input type="hidden" name="page" value="1">
+                        </form>
+                    </div>
+                </div>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -143,14 +170,14 @@
                                 <th>Device</th>
                                 <th>Time</th>
                                 <th>Event Type</th>
-                                <th>Location</th>
                                 <th>Speed</th>
                                 <th>Drowsy</th>
                                 <th>Yawns</th>
                                 <th>Eyes Closed</th>
                                 <th>Status</th>
-                                <th>Takeup Memo</th>
-                                <th>Takeup Time</th>
+                                <th>Take Type</th>
+                                <th>Memo</th>
+                                <th>Time</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -159,7 +186,6 @@
                                 <td>{{ event.device_name }}</td>
                                 <td>{{ event.alarm_time }}</td>
                                 <td>{{ event.alarm_type_value }}</td>
-                                <td>{{ event.location }}</td>
                                 <td>{{ event.speed }} km/h</td>
                                 <td>
                                     <span class="status-badge {% if event.is_drowsy %}drowsy-true{% else %}drowsy-false{% endif %}">
@@ -173,6 +199,15 @@
                                         {{ event.processing_status }}
                                     </span>
                                 </td>
+                                <td>
+                                    {% if event.takeType is not none %}
+                                        <span class="badge {% if event.takeType == 0 %}bg-danger{% else %}bg-success{% endif %}">
+                                            {{ "True Alarm" if event.takeType == 0 else "False Alarm" if event.takeType == 1 else "-" }}
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                                 <td>{{ event.takeup_memo if event.takeup_memo else '-' }}</td>
                                 <td>{{ event.takeup_time if event.takeup_time else '-' }}</td>
                             </tr>
@@ -183,39 +218,33 @@
             </div>
             {% if pagination.total_records > 0 %}
             <div class="card-footer">
-                <nav aria-label="Evidence results navigation">
-                    <ul class="pagination justify-content-center mb-0">
-                        <!-- First Page -->
+                <!-- Pagination -->
+                <nav aria-label="Page navigation">
+                    <ul class="pagination justify-content-center">
                         <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
-                            <a class="page-link" href="?page=1" aria-label="First">
+                            <a class="page-link" href="?page=1{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="First">
                                 <span aria-hidden="true">&laquo;&laquo;</span>
                             </a>
                         </li>
-                        
-                        <!-- Previous Page -->
                         <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.page - 1 }}" aria-label="Previous">
+                            <a class="page-link" href="?page={{ pagination.page - 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
-
-                        <!-- Page Numbers -->
-                        {% for page_num in range(max(1, pagination.page - 2), min(pagination.total_pages + 1, pagination.page + 3)) %}
-                        <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                            <a class="page-link" href="?page={{ page_num }}">{{ page_num }}</a>
+                        
+                        {% for p in range(max(1, pagination.page - 2), min(pagination.total_pages + 1, pagination.page + 3)) %}
+                        <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                            <a class="page-link" href="?page={{ p }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}">{{ p }}</a>
                         </li>
                         {% endfor %}
-
-                        <!-- Next Page -->
+                        
                         <li class="page-item {% if pagination.page == pagination.total_pages %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.page + 1 }}" aria-label="Next">
+                            <a class="page-link" href="?page={{ pagination.page + 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
-
-                        <!-- Last Page -->
                         <li class="page-item {% if pagination.page == pagination.total_pages %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.total_pages }}" aria-label="Last">
+                            <a class="page-link" href="?page={{ pagination.total_pages }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="Last">
                                 <span aria-hidden="true">&raquo;&raquo;</span>
                             </a>
                         </li>
@@ -236,3 +265,75 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
+<script>
+    function handleAllEventsChange(checkbox) {
+        // If "All Events" is checked, uncheck other event types
+        if (checkbox.checked) {
+            document.querySelectorAll('.event-type-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+        }
+    }
+
+    function handleEventTypeChange() {
+        // If any specific event type is checked, uncheck "All Events"
+        const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
+        if (anyEventTypeChecked) {
+            document.getElementById('allEvents').checked = false;
+        } else {
+            // If no specific event type is checked, check "All Events"
+            document.getElementById('allEvents').checked = true;
+        }
+    }
+
+    // Initial check on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set default behavior - check both specific event types if nothing is selected
+        const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
+        const allEventsChecked = document.getElementById('allEvents').checked;
+        
+        if (!anyEventTypeChecked && !allEventsChecked) {
+            document.querySelectorAll('.event-type-checkbox').forEach(cb => {
+                cb.checked = true;
+            });
+            document.getElementById('allEvents').checked = false;
+        }
+        
+        handleEventTypeChange();
+    });
+</script>
+
+<style>
+    /* Filter controls styling */
+    .filter-controls {
+        display: flex;
+        align-items: center;
+    }
+    
+    .filter-controls .form-check-input {
+        background-color: #343a40;
+        border-color: #6c757d;
+    }
+    
+    .filter-controls .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+    
+    .filter-controls .form-check-label {
+        font-size: 0.9rem;
+    }
+    
+    .filter-controls .btn-outline-light {
+        font-size: 0.85rem;
+        padding: 0.25rem 0.5rem;
+    }
+</style>
+
+
+
+
+
+
+
