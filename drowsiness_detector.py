@@ -64,7 +64,7 @@ api_client = ApiClient(
 
 # Initialize the drowsiness analyzer
 drowsiness_analyzer = create_analyzer(
-    analyzer_type="threshold",
+    analyzer_type="rate",
     yawn_threshold=DROWSINESS_THRESHOLD_YAWN,
     eye_closed_threshold=DROWSINESS_THRESHOLD_EYE_CLOSED
 )

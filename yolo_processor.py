@@ -98,11 +98,11 @@ class YoloProcessor:
                 # Process detections
                 for result in results:
                     # Count yawns
-                    yawn_detections = result.boxes[result.boxes.cls == 0]  # Assuming class 0 is yawn
+                    yawn_detections = result.boxes[result.boxes.cls == 2]  # Assuming class 0 is yawn
                     yawn_count += len(yawn_detections)
                     
                     # Count closed eyes
-                    closed_eyes = result.boxes[result.boxes.cls == 1]  # Assuming class 1 is closed eyes
+                    closed_eyes = result.boxes[result.boxes.cls == 0]  # Assuming class 1 is closed eyes
                     if len(closed_eyes) > 0:
                         eye_closed_frames += 1
                         consecutive_eye_closed += 1
