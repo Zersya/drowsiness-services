@@ -216,6 +216,23 @@ class DataManager:
         except Exception as e:
             logging.error(f"Error updating evidence result: {e}")
     
+    def update_evidence_status(self, evidence_id, status):
+        """Updates the processing status of an evidence record."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE evidence_results
+                    SET processing_status = ?
+                    WHERE id = ?
+                ''', (status, evidence_id))
+                conn.commit()
+                logging.info(f"Updated evidence ID {evidence_id} status to {status}")
+                return True
+        except Exception as e:
+            logging.error(f"Error updating evidence status: {e}")
+            return False
+    
     def get_pending_evidence_count(self):
         """Get a count of pending evidence items for diagnostic purposes."""
         try:

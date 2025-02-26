@@ -109,9 +109,15 @@ def main():
                             # Store evidence in database
                             evidence_id = data_manager.store_evidence_result(evidence)
                             
+                            logging.info(f"Stored evidence for device: {evidence}")
+                            
                             # Process video if available
                             video_url = evidence.get('videoUrl')
-                            if video_url:
+
+                            if not ("Yawning" in evidence.get('alarmTypeValue', '') or "Eye closed" in evidence.get('alarmTypeValue', '')):
+                                logging.info(f"Skipping processing for device: {evidence.get('deviceName')} due to alarm type: {evidence.get('alarmTypeValue')}")
+                                data_manager.update_evidence_status(evidence_id, 'skipped')
+                            elif video_url:
                                 logging.info(f"Processing video for device: {evidence.get('deviceName')}")
                                 processing_success, detection_results = yolo_processor.process_video(video_url)
                                 

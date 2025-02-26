@@ -235,9 +235,15 @@
                                 <td>{{ event.alarm_type_value }}</td>
                                 <td>{{ event.speed }} km/h</td>
                                 <td>
-                                    <span class="status-badge {% if event.is_drowsy %}drowsy-true{% else %}drowsy-false{% endif %}">
-                                        {{ "Yes" if event.is_drowsy else "No" }}
-                                    </span>
+                                    {% if event.is_drowsy is not none %}
+                                        <span class="status-badge {% if event.is_drowsy %}drowsy-true{% else %}drowsy-false{% endif %}">
+                                            {% if event.is_drowsy %}
+                                                Yes
+                                            {% else %}
+                                                No
+                                            {% endif %}
+                                        </span>
+                                    {% endif %}
                                 </td>
                                 <td>{{ event.yawn_count or 0 }}</td>
                                 <td>{{ event.eye_closed_frames or 0 }}</td>

@@ -215,8 +215,8 @@ def create_analyzer(analyzer_type="threshold", **kwargs):
         eye_closed_threshold = kwargs.get('eye_closed_threshold', 5)
         return ThresholdBasedAnalyzer(yawn_threshold, eye_closed_threshold)
     elif analyzer_type == "rate":
-        eye_closed_percentage_threshold = kwargs.get('eye_closed_percentage_threshold', 60)
-        yawn_rate_threshold = kwargs.get('yawn_rate_threshold', 10)
+        eye_closed_percentage_threshold = kwargs.get('eye_closed_percentage_threshold', 65)
+        yawn_rate_threshold = kwargs.get('yawn_rate_threshold', 20)
         fps = kwargs.get('fps', 30)
         return RateBasedAnalyzer(eye_closed_percentage_threshold, yawn_rate_threshold, fps)
     elif analyzer_type == "probabilistic":
