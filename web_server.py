@@ -28,6 +28,13 @@ def index():
         per_page = 10  # Number of items per page
         offset = (page - 1) * per_page
         
+        # Filter parameters - get multiple event types
+        event_types = request.args.getlist('event_type')
+
+        # Set default event types if none are provided
+        if not event_types:
+            event_types = ['yawning', 'eye_closed']
+        
         # Get latest fetch time
         cursor = conn.execute('''
             SELECT last_fetch_time 
@@ -38,13 +45,33 @@ def index():
         last_fetch = cursor.fetchone()
         last_fetch_time = datetime.fromisoformat(last_fetch['last_fetch_time']) if last_fetch else None
 
-        # Get total count of evidence results
-        cursor = conn.execute('SELECT COUNT(*) as total FROM evidence_results')
+        # Base query for evidence results
+        base_query = '''
+            FROM evidence_results er
+            WHERE 1=1
+        '''
+        
+        # Apply event type filters
+        params = []
+        if event_types and 'all' not in event_types:
+            conditions = []
+            for event_type in event_types:
+                if event_type == 'yawning':
+                    conditions.append("er.alarm_type_value LIKE '%Yawn%'")
+                elif event_type == 'eye_closed':
+                    conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
+            
+            if conditions:
+                base_query += " AND (" + " OR ".join(conditions) + ")"
+        
+        # Get total count of evidence results with filters applied
+        count_query = f'SELECT COUNT(*) as total {base_query}'
+        cursor = conn.execute(count_query)
         total_records = cursor.fetchone()['total']
         total_pages = math.ceil(total_records / per_page)
 
-        # Get paginated evidence results
-        cursor = conn.execute('''
+        # Get paginated evidence results with filters applied
+        results_query = f'''
             SELECT 
                 er.device_name,
                 er.alarm_type,
@@ -58,11 +85,13 @@ def index():
                 er.processing_status,
                 er.fleet_name,
                 er.takeup_memo,
-                er.takeup_time
-            FROM evidence_results er
+                er.takeup_time,
+                er.takeType
+            {base_query}
             ORDER BY er.alarm_time DESC
             LIMIT ? OFFSET ?
-        ''', (per_page, offset))
+        '''
+        cursor = conn.execute(results_query, params + [per_page, offset])
         evidence_results = cursor.fetchall()
         
         # Get statistics
@@ -79,6 +108,14 @@ def index():
         ''')
         stats = cursor.fetchone()
         
+        # Get available event types for filter dropdown
+        cursor = conn.execute('''
+            SELECT DISTINCT alarm_type_value
+            FROM evidence_results
+            ORDER BY alarm_type_value
+        ''')
+        available_event_types = [row['alarm_type_value'] for row in cursor.fetchall()]
+        
         conn.close()
         
         return render_template('dashboard.html', 
@@ -90,6 +127,10 @@ def index():
                                  'per_page': per_page,
                                  'total_pages': total_pages,
                                  'total_records': total_records
+                             },
+                             filters={
+                                 'event_types': event_types,
+                                 'available_event_types': available_event_types
                              })
                              
     except Exception as e:
