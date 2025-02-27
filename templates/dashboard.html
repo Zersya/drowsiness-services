@@ -92,6 +92,65 @@
             font-weight: bold;
             color: #adb5bd;
         }
+        .confusion-matrix {
+            background-color: white;
+            margin-bottom: 0;
+        }
+
+        .confusion-matrix th,
+        .confusion-matrix td {
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .confusion-matrix th {
+            background-color: #f8f9fa;
+        }
+
+        .bg-success-light {
+            background-color: rgba(40, 167, 69, 0.1);
+        }
+
+        .bg-danger-light {
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+
+        .confusion-matrix td {
+            padding: 1rem;
+        }
+
+        .confusion-matrix td strong {
+            font-size: 1.2rem;
+            display: block;
+        }
+
+        .confusion-matrix td .small {
+            color: #6c757d;
+            font-size: 0.8rem;
+        }
+
+        .confusion-matrix-container {
+            background-color: #fff;
+            border-radius: 10px;
+            padding: 1rem;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .date-range-filter input[type="date"] {
+            min-width: 130px;
+        }
+        .date-range-filter input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+        @media (max-width: 768px) {
+            .filter-controls form {
+                flex-direction: column;
+                align-items: stretch !important;
+            }
+            .date-range-filter,
+            .event-type-filters {
+                margin-bottom: 1rem;
+            }
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -103,7 +162,7 @@
 
     <div class="container mt-4">
         <!-- Time Information -->
-        <div class="time-info">
+        <div class="time-info mb-4">
             <div class="row">
                 <div class="col-md-12">
                     <div class="label">Last Fetch Time:</div>
@@ -112,65 +171,150 @@
             </div>
         </div>
 
-        <!-- Statistics Cards -->
+        <!-- Main Statistics Section -->
         <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="stats-card card bg-primary text-white p-3">
+            <!-- Left Column: Event Statistics -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">Event Statistics</h5>
+                    </div>
                     <div class="card-body">
-                        <h5 class="card-title">Total Events</h5>
-                        <h2 class="card-text">{{ stats.total_events }}</h2>
+                        <div class="row">
+                            <!-- Total Events -->
+                            <div class="col-md-6 mb-3">
+                                <div class="stats-card card bg-primary text-white p-3">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Total Events</h5>
+                                        <h2 class="card-text">{{ stats.total_events }}</h2>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Drowsy Events -->
+                            <div class="col-md-6 mb-3">
+                                <div class="stats-card card bg-warning text-dark p-3">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Drowsy Events</h5>
+                                        <h2 class="card-text">{{ stats.drowsy_events }}</h2>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Unique Devices -->
+                            <div class="col-md-6">
+                                <div class="stats-card card bg-success text-white p-3">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Unique Devices</h5>
+                                        <h2 class="card-text">{{ stats.unique_devices }}</h2>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Active Fleets -->
+                            <div class="col-md-6">
+                                <div class="stats-card card bg-info text-white p-3">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Active Fleets</h5>
+                                        <h2 class="card-text">{{ stats.unique_fleets }}</h2>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="stats-card card bg-warning text-dark p-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Drowsy Events</h5>
-                        <h2 class="card-text">{{ stats.drowsy_events }}</h2>
+
+            <!-- Right Column: Processing Status -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">Processing Status</h5>
                     </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stats-card card bg-success text-white p-3">
                     <div class="card-body">
-                        <h5 class="card-title">Unique Devices</h5>
-                        <h2 class="card-text">{{ stats.unique_devices }}</h2>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stats-card card bg-info text-white p-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Active Fleets</h5>
-                        <h2 class="card-text">{{ stats.unique_fleets }}</h2>
+                        <div class="stats-card card bg-success text-white p-3 mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Processed</h5>
+                                <h2 class="card-text">{{ stats.processed_events }}</h2>
+                            </div>
+                        </div>
+                        <div class="stats-card card bg-warning text-dark p-3 mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Pending</h5>
+                                <h2 class="card-text">{{ stats.pending_events }}</h2>
+                            </div>
+                        </div>
+                        <div class="stats-card card bg-danger text-white p-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Failed</h5>
+                                <h2 class="card-text">{{ stats.failed_events }}</h2>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Processing Status Cards -->
-        <div class="row mb-4">
-            <div class="col-md-4">
-                <div class="stats-card card bg-success text-white p-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Processed</h5>
-                        <h2 class="card-text">{{ stats.processed_events }}</h2>
-                    </div>
-                </div>
+        <!-- Model Performance Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Model Performance Analysis</h5>
+                <span class="badge bg-info">ML Metrics</span>
             </div>
-            <div class="col-md-4">
-                <div class="stats-card card bg-warning text-dark p-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Pending</h5>
-                        <h2 class="card-text">{{ stats.pending_events }}</h2>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Confusion Matrix -->
+                    <div class="col-md-8">
+                        <div class="confusion-matrix-container">
+                            <h6 class="text-center mb-3">Confusion Matrix</h6>
+                            <div class="table-responsive">
+                                <table class="table table-bordered confusion-matrix">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th class="text-center">Predicted Drowsy</th>
+                                            <th class="text-center">Predicted Not Drowsy</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <th>Actually Drowsy</th>
+                                            <td class="text-center bg-success-light">
+                                                <strong>{{ stats.true_positives }}</strong>
+                                                <div class="small">True Positives</div>
+                                            </td>
+                                            <td class="text-center bg-danger-light">
+                                                <strong>{{ stats.false_negatives }}</strong>
+                                                <div class="small">False Negatives</div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th>Actually Not Drowsy</th>
+                                            <td class="text-center bg-danger-light">
+                                                <strong>{{ stats.false_positives }}</strong>
+                                                <div class="small">False Positives</div>
+                                            </td>
+                                            <td class="text-center bg-success-light">
+                                                <strong>{{ stats.true_negatives }}</strong>
+                                                <div class="small">True Negatives</div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="stats-card card bg-danger text-white p-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Failed</h5>
-                        <h2 class="card-text">{{ stats.failed_events }}</h2>
+                    <!-- Performance Metrics -->
+                    <div class="col-md-4">
+                        <div class="stats-card card bg-info text-white p-3 mb-3">
+                            <div class="card-body text-center">
+                                <h6 class="card-subtitle mb-2">Accuracy</h6>
+                                <h2 class="card-text">{{ "%.1f"|format(stats.accuracy|float) }}%</h2>
+                            </div>
+                        </div>
+                        <div class="stats-card card bg-success text-white p-3">
+                            <div class="card-body text-center">
+                                <h6 class="card-subtitle mb-2">Sensitivity</h6>
+                                <h2 class="card-text">{{ "%.1f"|format(stats.sensitivity|float) }}%</h2>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -179,29 +323,49 @@
         <!-- Events Table -->
         <div class="card">
             <div class="card-header bg-dark text-white">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Recent Events</h5>
+                <div class="d-flex justify-content-between align-items-center flex-wrap">
+                    <h5 class="mb-2 mb-md-0">Recent Events</h5>
                     <div class="filter-controls">
-                        <form method="get" class="d-flex align-items-center" id="filterForm">
-                            <div class="form-check form-check-inline me-2">
-                                <input class="form-check-input" type="checkbox" id="allEvents" name="event_type" value="all" 
-                                       {% if not filters.event_types or ('all' in filters.event_types and not 'yawning' in filters.event_types and not 'eye_closed' in filters.event_types) %}checked{% endif %}
-                                       onchange="handleAllEventsChange(this)">
-                                <label class="form-check-label text-white" for="allEvents">All Events</label>
+                        <form method="get" class="d-flex align-items-center flex-wrap" id="filterForm">
+                            <!-- Date Range Filter -->
+                            <div class="date-range-filter me-3 mb-2 mb-md-0">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-dark text-white border-secondary">From</span>
+                                    <input type="date" class="form-control form-control-sm bg-dark text-white border-secondary" 
+                                           id="startDate" name="start_date" 
+                                           value="{{ filters.start_date if filters.start_date else '' }}">
+                                    <span class="input-group-text bg-dark text-white border-secondary">To</span>
+                                    <input type="date" class="form-control form-control-sm bg-dark text-white border-secondary" 
+                                           id="endDate" name="end_date" 
+                                           value="{{ filters.end_date if filters.end_date else '' }}">
+                                </div>
                             </div>
-                            <div class="form-check form-check-inline me-2">
-                                <input class="form-check-input event-type-checkbox" type="checkbox" id="yawningEvents" name="event_type" value="yawning" 
-                                       {% if not filters.event_types or 'yawning' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
-                                       onchange="handleEventTypeChange()">
-                                <label class="form-check-label text-white" for="yawningEvents">Yawning</label>
+                            
+                            <!-- Existing Event Type Filters -->
+                            <div class="event-type-filters me-3">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="allEvents" name="event_type" value="all" 
+                                           {% if not filters.event_types or ('all' in filters.event_types and not 'yawning' in filters.event_types and not 'eye_closed' in filters.event_types) %}checked{% endif %}
+                                           onchange="handleAllEventsChange(this)">
+                                    <label class="form-check-label text-white" for="allEvents">All Events</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input event-type-checkbox" type="checkbox" id="yawningEvents" name="event_type" value="yawning" 
+                                           {% if not filters.event_types or 'yawning' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
+                                           onchange="handleEventTypeChange()">
+                                    <label class="form-check-label text-white" for="yawningEvents">Yawning</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input event-type-checkbox" type="checkbox" id="eyeClosedEvents" name="event_type" value="eye_closed" 
+                                           {% if not filters.event_types or 'eye_closed' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
+                                           onchange="handleEventTypeChange()">
+                                    <label class="form-check-label text-white" for="eyeClosedEvents">Eye Closed</label>
+                                </div>
                             </div>
-                            <div class="form-check form-check-inline me-2">
-                                <input class="form-check-input event-type-checkbox" type="checkbox" id="eyeClosedEvents" name="event_type" value="eye_closed" 
-                                       {% if not filters.event_types or 'eye_closed' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
-                                       onchange="handleEventTypeChange()">
-                                <label class="form-check-label text-white" for="eyeClosedEvents">Eye Closed</label>
-                            </div>
-                            <button type="submit" class="btn btn-sm btn-outline-light ms-2">Apply Filters</button>
+                            
+                            <button type="submit" class="btn btn-sm btn-outline-light">Apply Filters</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="resetFilters()">Reset</button>
+                            
                             <!-- Preserve pagination when filtering -->
                             <input type="hidden" name="page" value="1">
                         </form>
@@ -461,6 +625,33 @@
             }
             
             handleEventTypeChange();
+        });
+
+        function resetFilters() {
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            document.getElementById('allEvents').checked = true;
+            document.querySelectorAll('.event-type-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            document.getElementById('filterForm').submit();
+        }
+
+        // Set max date to today
+        document.addEventListener('DOMContentLoaded', function() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('startDate').max = today;
+            document.getElementById('endDate').max = today;
+            
+            // Ensure end date is not before start date
+            document.getElementById('startDate').addEventListener('change', function() {
+                document.getElementById('endDate').min = this.value;
+            });
+            
+            // Ensure start date is not after end date
+            document.getElementById('endDate').addEventListener('change', function() {
+                document.getElementById('startDate').max = this.value;
+            });
         });
     </script>
     <style>

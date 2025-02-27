@@ -1,6 +1,6 @@
 from flask import Flask, render_template, jsonify, request
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import math
 
@@ -45,33 +45,50 @@ def index():
         last_fetch = cursor.fetchone()
         last_fetch_time = datetime.fromisoformat(last_fetch['last_fetch_time']) if last_fetch else None
 
-        # Base query for evidence results
-        base_query = '''
-            FROM evidence_results er
-            WHERE 1=1
-        '''
+        # Get date range filters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
         
-        # Apply event type filters
+        # Initialize params list for SQL queries
         params = []
+        
+        # Base query conditions
+        conditions = []
+        
+        # Add date range conditions
+        if start_date:
+            conditions.append("DATE(er.alarm_time) >= DATE(?)")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(er.alarm_time) <= DATE(?)")
+            params.append(end_date)
+        
+        # Add event type conditions
         if event_types and 'all' not in event_types:
-            conditions = []
+            event_conditions = []
             for event_type in event_types:
                 if event_type == 'yawning':
-                    conditions.append("er.alarm_type_value LIKE '%Yawn%'")
+                    event_conditions.append("er.alarm_type_value LIKE '%Yawn%'")
                 elif event_type == 'eye_closed':
-                    conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
+                    event_conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
             
-            if conditions:
-                base_query += " AND (" + " OR ".join(conditions) + ")"
+            if event_conditions:
+                conditions.append("(" + " OR ".join(event_conditions) + ")")
+        
+        # Construct the WHERE clause
+        where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
         
         # Get total count of evidence results with filters applied
-        count_query = f'SELECT COUNT(*) as total {base_query}'
-        cursor = conn.execute(count_query)
+        count_query = f'''
+            SELECT COUNT(*) as total 
+            FROM evidence_results er
+            {where_clause}
+        '''
+        cursor = conn.execute(count_query, params)
         total_records = cursor.fetchone()['total']
         total_pages = math.ceil(total_records / per_page)
 
         # Get paginated evidence results with filters applied
-        # Update the query to include video_url in the results
         results_query = f'''
             SELECT 
                 er.id,
@@ -91,26 +108,51 @@ def index():
                 er.takeup_memo,
                 er.takeup_time,
                 er.takeType
-            {base_query}
+            FROM evidence_results er
+            {where_clause}
             ORDER BY er.alarm_time DESC
             LIMIT ? OFFSET ?
         '''
-        cursor = conn.execute(results_query, params + [per_page, offset])
+        # Create a new params list for the results query
+        results_params = params + [per_page, offset]
+        cursor = conn.execute(results_query, results_params)
         evidence_results = cursor.fetchall()
         
-        # Get statistics
-        cursor = conn.execute('''
+        # Get statistics with filters applied
+        stats_query = f'''
             SELECT 
                 COUNT(*) as total_events,
-                SUM(CASE WHEN is_drowsy = 1 THEN 1 ELSE 0 END) as drowsy_events,
-                COUNT(DISTINCT device_id) as unique_devices,
+                COUNT(DISTINCT device_name) as unique_devices,
                 COUNT(DISTINCT fleet_name) as unique_fleets,
-                SUM(CASE WHEN processing_status = 'processed' THEN 1 ELSE 0 END) as processed_events,
-                SUM(CASE WHEN processing_status = 'pending' THEN 1 ELSE 0 END) as pending_events,
-                SUM(CASE WHEN processing_status = 'failed' THEN 1 ELSE 0 END) as failed_events
-            FROM evidence_results
-        ''')
-        stats = cursor.fetchone()
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 THEN 1 ELSE 0 END), 0) as drowsy_events,
+                COALESCE(SUM(CASE WHEN processing_status = 'processed' THEN 1 ELSE 0 END), 0) as processed_events,
+                COALESCE(SUM(CASE WHEN processing_status = 'pending' THEN 1 ELSE 0 END), 0) as pending_events,
+                COALESCE(SUM(CASE WHEN processing_status = 'failed' THEN 1 ELSE 0 END), 0) as failed_events,
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as true_positives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as false_positives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as true_negatives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as false_negatives
+            FROM evidence_results er
+            {" WHERE " + " AND ".join(["processing_status = 'processed'"] + conditions) if conditions else " WHERE processing_status = 'processed'"}
+        '''
+        cursor = conn.execute(stats_query, params)
+        stats = dict(cursor.fetchone())
+        
+        # Calculate accuracy and sensitivity
+        total_predictions = (stats['true_positives'] + stats['true_negatives'] + 
+                           stats['false_positives'] + stats['false_negatives'])
+        
+        if total_predictions > 0:
+            stats['accuracy'] = ((stats['true_positives'] + stats['true_negatives']) / 
+                               total_predictions) * 100
+        else:
+            stats['accuracy'] = 0.0
+            
+        if (stats['true_positives'] + stats['false_negatives']) > 0:
+            stats['sensitivity'] = (stats['true_positives'] / 
+                                  (stats['true_positives'] + stats['false_negatives'])) * 100
+        else:
+            stats['sensitivity'] = 0.0
         
         # Get available event types for filter dropdown
         cursor = conn.execute('''
@@ -134,7 +176,9 @@ def index():
                              },
                              filters={
                                  'event_types': event_types,
-                                 'available_event_types': available_event_types
+                                 'available_event_types': available_event_types,
+                                 'start_date': start_date,
+                                 'end_date': end_date
                              })
                              
     except Exception as e:
