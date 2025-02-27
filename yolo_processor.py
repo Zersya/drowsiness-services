@@ -12,6 +12,10 @@ class YoloProcessor:
         self.drowsiness_threshold_yawn = drowsiness_threshold_yawn
         self.drowsiness_threshold_eye_closed = drowsiness_threshold_eye_closed
         self.model = self.load_model()
+        # Add parameters for eye detection tuning
+        self.min_blink_frames = 3  # Minimum frames for a blink
+        self.blink_cooldown = 15  # Frames to wait before counting next blink
+        self.confidence_threshold = 0.6  # Minimum confidence for eye closed detection
         
     def load_model(self):
         """Loads and returns a YOLO model for drowsiness detection."""
@@ -80,6 +84,8 @@ class YoloProcessor:
             eye_closed_frames = 0
             total_processed_frames = 0
             consecutive_eye_closed = 0  # Track consecutive frames with closed eyes
+            blink_cooldown_counter = 0
+            potential_blink_frames = 0
 
             cap = cv2.VideoCapture(local_video_path)
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -101,14 +107,23 @@ class YoloProcessor:
                     yawn_detections = result.boxes[result.boxes.cls == 2]  # Assuming class 0 is yawn
                     yawn_count += len(yawn_detections)
                     
-                    # Count closed eyes
-                    closed_eyes = result.boxes[result.boxes.cls == 0]  # Assuming class 1 is closed eyes
-                    if len(closed_eyes) > 0:
-                        eye_closed_frames += 1
+                    # Improved closed eyes detection
+                    closed_eyes = result.boxes[result.boxes.cls == 0]
+                    confident_detections = closed_eyes[closed_eyes.conf >= self.confidence_threshold]
+                    
+                    if len(confident_detections) > 0:
+                        potential_blink_frames += 1
                         consecutive_eye_closed += 1
                     else:
+                        if potential_blink_frames >= self.min_blink_frames and blink_cooldown_counter == 0:
+                            eye_closed_frames += 1
+                            blink_cooldown_counter = self.blink_cooldown
+                        potential_blink_frames = 0
                         consecutive_eye_closed = 0
-                    
+
+                    if blink_cooldown_counter > 0:
+                        blink_cooldown_counter -= 1
+
                     # Early detection of severe drowsiness
                     if (yawn_count >= self.drowsiness_threshold_yawn or 
                         consecutive_eye_closed >= self.drowsiness_threshold_eye_closed):
