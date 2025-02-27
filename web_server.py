@@ -128,10 +128,10 @@ def index():
                 COALESCE(SUM(CASE WHEN processing_status = 'processed' THEN 1 ELSE 0 END), 0) as processed_events,
                 COALESCE(SUM(CASE WHEN processing_status = 'pending' THEN 1 ELSE 0 END), 0) as pending_events,
                 COALESCE(SUM(CASE WHEN processing_status = 'failed' THEN 1 ELSE 0 END), 0) as failed_events,
-                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as true_positives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as false_positives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as true_negatives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as false_negatives
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as true_positives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as false_positives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as true_negatives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as false_negatives
             FROM evidence_results er
             {" WHERE " + " AND ".join(["processing_status = 'processed'"] + conditions) if conditions else " WHERE processing_status = 'processed'"}
         '''
