@@ -14,6 +14,7 @@ from data_manager import DataManager
 from yolo_processor import YoloProcessor
 from api_client import ApiClient
 from drowsiness_analyzer import create_analyzer
+from ml_metrics_analyzer import MLMetricsAnalyzer
 
 # Set up logging first
 logging.basicConfig(
@@ -62,22 +63,31 @@ api_client = ApiClient(
     PASSWORD
 )
 
-# Initialize the drowsiness analyzer
+# Initialize the drowsiness analyzer and ML metrics analyzer
 drowsiness_analyzer = create_analyzer(
     analyzer_type="rate",
     yawn_threshold=DROWSINESS_THRESHOLD_YAWN,
     eye_closed_threshold=DROWSINESS_THRESHOLD_EYE_CLOSED
 )
+ml_metrics_analyzer = MLMetricsAnalyzer()
 
-def analyze_drowsiness(yawn_count, eye_closed_frames, total_frames_processed):
-    """Analyzes detection counts to determine drowsiness using the configured analyzer."""
+def analyze_drowsiness(yawn_count, eye_closed_frames, total_frames_processed, take_type=None):
+    """Analyzes detection counts to determine drowsiness and ML metrics."""
+    # Get drowsiness analysis
     result = drowsiness_analyzer.analyze(yawn_count, eye_closed_frames, total_frames_processed)
     
-    if result['is_drowsy']:
-        logging.warning(
-            f"Drowsiness detected with {result['confidence']*100:.1f}% confidence!\n"
-            f"Details: {result['details']}"
-        )
+    # Get ML metrics if take_type is provided
+    if take_type is not None:
+        ml_metrics = ml_metrics_analyzer.analyze(result['is_drowsy'], take_type)
+        result['ml_metrics'] = ml_metrics
+        
+        if result['is_drowsy']:
+            logging.warning(
+                f"Drowsiness detected with {result['confidence']*100:.1f}% confidence!\n"
+                f"ML Metrics - Sensitivity: {ml_metrics['sensitivity']:.1f}%, "
+                f"Accuracy: {ml_metrics['accuracy']:.1f}%\n"
+                f"Details: {result['details']}"
+            )
     
     return result
 
@@ -122,6 +132,9 @@ def main():
                                 processing_success, detection_results = yolo_processor.process_video(video_url)
                                 
                                 if processing_success and detection_results:
+                                    # Get take_type from evidence
+                                    take_type = evidence.get('takeType') == 0  # Assuming 0 means True Alarm
+                                    
                                     # Analyze drowsiness using the analyzer
                                     yawn_count = detection_results.get('yawn_count', 0)
                                     eye_closed_frames = detection_results.get('eye_closed_frames', 0)
@@ -130,7 +143,8 @@ def main():
                                     analysis_result = analyze_drowsiness(
                                         yawn_count, 
                                         eye_closed_frames, 
-                                        total_frames
+                                        total_frames,
+                                        take_type
                                     )
                                     
                                     # Update detection results with analysis
@@ -139,6 +153,10 @@ def main():
                                         'confidence': analysis_result['confidence'],
                                         'analysis_details': analysis_result['details']
                                     })
+                                    
+                                    # Add ML metrics if available
+                                    if 'ml_metrics' in analysis_result:
+                                        detection_results['ml_metrics'] = analysis_result['ml_metrics']
                                     
                                     # Update evidence with detection results
                                     data_manager.update_evidence_result(evidence_id, detection_results)
