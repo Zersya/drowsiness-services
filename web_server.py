@@ -1,15 +1,30 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 import sqlite3
 from datetime import datetime, timedelta
 import os
 import math
+from dotenv import load_dotenv
+from functools import wraps
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Required for session management
+
+# Load environment variables
+load_dotenv()
+WEB_ACCESS_PIN = os.getenv("WEB_ACCESS_PIN", "123456")
 
 # Add max and min functions to template context
 app.jinja_env.globals.update(max=max, min=min)
 
 DB_PATH = "drowsiness_detection.db"  # Same as in drowsiness_detector.py
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'authenticated' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def get_db_connection():
     """Create a database connection."""
@@ -17,7 +32,24 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row  # This enables column access by name
     return conn
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        pin = request.form.get('pin')
+        if pin == WEB_ACCESS_PIN:
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+        error = 'Invalid PIN'
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+def logout():
+    session.pop('authenticated', None)
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def index():
     """Render the main dashboard page."""
     try:
