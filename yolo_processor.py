@@ -5,12 +5,16 @@ import hashlib
 import torch
 from ultralytics import YOLO
 import requests
+from dotenv import load_dotenv
 
 class YoloProcessor:
     def __init__(self, model_path, drowsiness_threshold_yawn, drowsiness_threshold_eye_closed):
         self.model_path = model_path
         self.drowsiness_threshold_yawn = drowsiness_threshold_yawn
         self.drowsiness_threshold_eye_closed = drowsiness_threshold_eye_closed
+        # Load environment variables
+        load_dotenv()
+        self.use_cuda = os.getenv('USE_CUDA', 'true').lower() == 'true'
         self.model = self.load_model()
         # Add parameters for eye detection tuning
         self.min_blink_frames = 3  # Minimum frames for a blink
@@ -21,9 +25,10 @@ class YoloProcessor:
         """Loads and returns a YOLO model for drowsiness detection."""
         logging.info("Loading YOLO model...")
         try:
-            # Check if CUDA is available
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            logging.info(f"Using device: {device}")
+            # Check if CUDA is available and enabled
+            cuda_available = torch.cuda.is_available()
+            device = 'cuda' if (cuda_available and self.use_cuda) else 'cpu'
+            logging.info(f"CUDA available: {cuda_available}, Using device: {device}")
 
             # Load the model
             model = YOLO(self.model_path)
@@ -35,7 +40,14 @@ class YoloProcessor:
             model.conf = 0.25  # Confidence threshold
             model.iou = 0.45   # NMS IOU threshold
             
-            logging.info("YOLO model loaded successfully")
+            if device == 'cuda':
+                # Enable CUDA optimizations
+                torch.backends.cudnn.benchmark = True
+                torch.backends.cudnn.deterministic = False
+                # Set CUDA stream
+                torch.cuda.set_stream(torch.cuda.Stream())
+                
+            logging.info(f"YOLO model loaded successfully on {device}")
             return model
             
         except Exception as e:
@@ -69,7 +81,23 @@ class YoloProcessor:
         except Exception as e:
             logging.error(f"Error downloading video: {e}")
             return None
-    
+
+    def process_frame(self, frame):
+        """Process a single frame with appropriate device placement."""
+        try:
+            if self.use_cuda and torch.cuda.is_available():
+                # Convert frame to tensor and move to GPU
+                frame_tensor = torch.from_numpy(frame).cuda()
+                results = self.model(frame_tensor)
+                # Move results back to CPU if needed
+                results = [r.cpu() for r in results]
+            else:
+                results = self.model(frame)
+            return results
+        except Exception as e:
+            logging.error(f"Error processing frame: {e}")
+            return None
+
     def process_video(self, video_url):
         """Process video for drowsiness detection and return results."""
         try:
@@ -98,13 +126,15 @@ class YoloProcessor:
                 if not ret:
                     break
 
-                # Process frame with YOLO model
-                results = self.model(frame)
+                # Process frame with YOLO model using the new process_frame method
+                results = self.process_frame(frame)
+                if results is None:
+                    continue
                 
                 # Process detections
                 for result in results:
                     # Count yawns
-                    yawn_detections = result.boxes[result.boxes.cls == 2]  # Assuming class 0 is yawn
+                    yawn_detections = result.boxes[result.boxes.cls == 2]  # Assuming class 2 is yawn
                     yawn_count += len(yawn_detections)
                     
                     # Improved closed eyes detection
