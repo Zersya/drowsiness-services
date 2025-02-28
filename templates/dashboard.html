@@ -267,7 +267,16 @@
         <div class="card mb-4">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Performance Analysis</h5>
-                <span class="badge bg-info">Metrics</span>
+                <div class="d-flex align-items-center">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <input type="radio" class="btn-check" name="analysisType" id="takeDrowsy" value="takeDrowsy" checked>
+                        <label class="btn btn-outline-light" for="takeDrowsy">Drowsy vs Take Type</label>
+                        
+                        <input type="radio" class="btn-check" name="analysisType" id="takeReview" value="takeReview">
+                        <label class="btn btn-outline-light" for="takeReview">Review Type vs Take Type</label>
+                    </div>
+                    <span class="badge bg-info ms-2">Metrics</span>
+                </div>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -276,7 +285,8 @@
                         <div class="confusion-matrix-container">
                             <h6 class="text-center mb-3">Confusion Matrix</h6>
                             <div class="table-responsive">
-                                <table class="table table-bordered confusion-matrix">
+                                <!-- Take vs Drowsy Matrix -->
+                                <table class="table table-bordered confusion-matrix" id="takeDrowsyMatrix">
                                     <thead>
                                         <tr>
                                             <th></th>
@@ -288,22 +298,57 @@
                                         <tr>
                                             <th>Actually Drowsy</th>
                                             <td class="text-center bg-success-light">
-                                                <strong>{{ stats.true_positives }}</strong>
+                                                <strong>{{ stats.take_true_positives }}</strong>
                                                 <div class="small">True Positives</div>
                                             </td>
                                             <td class="text-center bg-danger-light">
-                                                <strong>{{ stats.false_negatives }}</strong>
+                                                <strong>{{ stats.take_false_negatives }}</strong>
                                                 <div class="small">False Negatives</div>
                                             </td>
                                         </tr>
                                         <tr>
                                             <th>Actually Not Drowsy</th>
                                             <td class="text-center bg-danger-light">
-                                                <strong>{{ stats.false_positives }}</strong>
+                                                <strong>{{ stats.take_false_positives }}</strong>
                                                 <div class="small">False Positives</div>
                                             </td>
                                             <td class="text-center bg-success-light">
-                                                <strong>{{ stats.true_negatives }}</strong>
+                                                <strong>{{ stats.take_true_negatives }}</strong>
+                                                <div class="small">True Negatives</div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                
+                                <!-- Take vs Review Matrix -->
+                                <table class="table table-bordered confusion-matrix d-none" id="takeReviewMatrix">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th class="text-center">Predicted Drowsy</th>
+                                            <th class="text-center">Predicted Not Drowsy</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <th>Actually Drowsy</th>
+                                            <td class="text-center bg-success-light">
+                                                <strong>{{ stats.review_true_positives }}</strong>
+                                                <div class="small">True Positives</div>
+                                            </td>
+                                            <td class="text-center bg-danger-light">
+                                                <strong>{{ stats.review_false_negatives }}</strong>
+                                                <div class="small">False Negatives</div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th>Actually Not Drowsy</th>
+                                            <td class="text-center bg-danger-light">
+                                                <strong>{{ stats.review_false_positives }}</strong>
+                                                <div class="small">False Positives</div>
+                                            </td>
+                                            <td class="text-center bg-success-light">
+                                                <strong>{{ stats.review_true_negatives }}</strong>
                                                 <div class="small">True Negatives</div>
                                             </td>
                                         </tr>
@@ -314,16 +359,35 @@
                     </div>
                     <!-- Performance Metrics -->
                     <div class="col-md-4">
-                        <div class="stats-card card bg-info text-white p-3 mb-3">
-                            <div class="card-body text-center">
-                                <h6 class="card-subtitle mb-2">Accuracy</h6>
-                                <h2 class="card-text">{{ "%.1f"|format(stats.accuracy|float) }}%</h2>
+                        <!-- Take vs Drowsy Metrics -->
+                        <div id="takeDrowsyMetrics">
+                            <div class="stats-card card bg-info text-white p-3 mb-3">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2">Accuracy (Drowsy vs Take)</h6>
+                                    <h2 class="card-text">{{ "%.1f"|format(stats.take_accuracy|float) }}%</h2>
+                                </div>
+                            </div>
+                            <div class="stats-card card bg-success text-white p-3">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2">Sensitivity (Drowsy vs Take)</h6>
+                                    <h2 class="card-text">{{ "%.1f"|format(stats.take_sensitivity|float) }}%</h2>
+                                </div>
                             </div>
                         </div>
-                        <div class="stats-card card bg-success text-white p-3">
-                            <div class="card-body text-center">
-                                <h6 class="card-subtitle mb-2">Sensitivity</h6>
-                                <h2 class="card-text">{{ "%.1f"|format(stats.sensitivity|float) }}%</h2>
+                        
+                        <!-- Take vs Review Metrics -->
+                        <div id="takeReviewMetrics" class="d-none">
+                            <div class="stats-card card bg-info text-white p-3 mb-3">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2">Accuracy (Review vs Take)</h6>
+                                    <h2 class="card-text">{{ "%.1f"|format(stats.review_accuracy|float) }}%</h2>
+                                </div>
+                            </div>
+                            <div class="stats-card card bg-success text-white p-3">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2">Sensitivity (Review vs Take)</h6>
+                                    <h2 class="card-text">{{ "%.1f"|format(stats.review_sensitivity|float) }}%</h2>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -398,7 +462,8 @@
                                 <th>Status</th>
                                 <th>Take Type</th>
                                 <th>Memo</th>
-                                <th>Time</th>
+                                <th>Memo Time</th>
+                                <th>Review Type</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -438,6 +503,15 @@
                                 </td>
                                 <td>{{ event.takeup_memo if event.takeup_memo else '-' }}</td>
                                 <td>{{ event.takeup_time if event.takeup_time else '-' }}</td>
+                                <td>
+                                    {% if event.review_type is not none %}
+                                        <span class="badge {% if event.review_type == 0 %}bg-danger{% else %}bg-success{% endif %}">
+                                            {{ "True Alarm" if event.review_type == 0 else "False Alarm" if event.review_type == 1 else "-" }}
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if event.video_url %}
                                         <button type="button" class="btn btn-sm btn-primary action-btn" 
@@ -662,6 +736,36 @@
             // Ensure start date is not after end date
             document.getElementById('endDate').addEventListener('change', function() {
                 document.getElementById('startDate').max = this.value;
+            });
+        });
+
+        // Add this JavaScript to handle the toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const radioButtons = document.querySelectorAll('input[name="analysisType"]');
+            
+            function updateDisplay(value) {
+                const takeDrowsyMatrix = document.getElementById('takeDrowsyMatrix');
+                const takeReviewMatrix = document.getElementById('takeReviewMatrix');
+                const takeDrowsyMetrics = document.getElementById('takeDrowsyMetrics');
+                const takeReviewMetrics = document.getElementById('takeReviewMetrics');
+                
+                if (value === 'takeDrowsy') {
+                    takeDrowsyMatrix.classList.remove('d-none');
+                    takeDrowsyMetrics.classList.remove('d-none');
+                    takeReviewMatrix.classList.add('d-none');
+                    takeReviewMetrics.classList.add('d-none');
+                } else {
+                    takeDrowsyMatrix.classList.add('d-none');
+                    takeDrowsyMetrics.classList.add('d-none');
+                    takeReviewMatrix.classList.remove('d-none');
+                    takeReviewMetrics.classList.remove('d-none');
+                }
+            }
+            
+            radioButtons.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    updateDisplay(e.target.value);
+                });
             });
         });
     </script>

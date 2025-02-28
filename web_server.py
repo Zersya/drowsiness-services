@@ -139,7 +139,8 @@ def index():
                 er.fleet_name,
                 er.takeup_memo,
                 er.takeup_time,
-                er.takeType
+                er.takeType,
+                er.review_type
             FROM evidence_results er
             {where_clause}
             ORDER BY er.alarm_time DESC
@@ -150,41 +151,66 @@ def index():
         cursor = conn.execute(results_query, results_params)
         evidence_results = cursor.fetchall()
         
-        # Get statistics with filters applied
+        # First, let's create a base condition for pending events that will be used consistently
+        pending_condition = "processing_status = 'pending' AND video_url IS NOT NULL"
+
+        # Stats query with corrected pending events counting
         stats_query = f'''
+            WITH pending_count AS (
+                SELECT COUNT(*) as count
+                FROM evidence_results 
+                WHERE {pending_condition}
+                {" AND " + " AND ".join(conditions) if conditions else ""}
+            )
             SELECT 
                 COUNT(*) as total_events,
                 COUNT(DISTINCT device_name) as unique_devices,
                 COUNT(DISTINCT fleet_name) as unique_fleets,
                 COALESCE(SUM(CASE WHEN is_drowsy = 1 THEN 1 ELSE 0 END), 0) as drowsy_events,
                 COALESCE(SUM(CASE WHEN processing_status = 'processed' THEN 1 ELSE 0 END), 0) as processed_events,
-                COALESCE(SUM(CASE WHEN processing_status = 'pending' THEN 1 ELSE 0 END), 0) as pending_events,
+                (SELECT count FROM pending_count) as pending_events,
                 COALESCE(SUM(CASE WHEN processing_status = 'failed' THEN 1 ELSE 0 END), 0) as failed_events,
-                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as true_positives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as false_positives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as true_negatives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as false_negatives
+                -- Take Type metrics
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as take_true_positives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as take_false_positives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as take_true_negatives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as take_false_negatives,
+                -- Review Type vs Take Type metrics
+                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as review_true_positives,
+                COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as review_false_positives,
+                COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as review_true_negatives,
+                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as review_false_negatives
             FROM evidence_results er
-            {" WHERE " + " AND ".join(["processing_status = 'processed'"] + conditions) if conditions else " WHERE processing_status = 'processed'"}
+            {" WHERE " + " AND ".join(conditions) if conditions else ""}
         '''
         cursor = conn.execute(stats_query, params)
         stats = dict(cursor.fetchone())
-        
-        # Calculate accuracy and sensitivity
-        total_predictions = (stats['true_positives'] + stats['true_negatives'] + 
-                           stats['false_positives'] + stats['false_negatives'])
-        
-        if total_predictions > 0:
-            stats['accuracy'] = ((stats['true_positives'] + stats['true_negatives']) / 
-                               total_predictions) * 100
+
+        # Calculate Take Type metrics
+        take_total_predictions = (stats['take_true_positives'] + stats['take_true_negatives'] + 
+                                 stats['take_false_positives'] + stats['take_false_negatives'])
+
+        if take_total_predictions > 0:
+            stats['take_accuracy'] = ((stats['take_true_positives'] + stats['take_true_negatives']) / 
+                                     take_total_predictions) * 100
+            stats['take_sensitivity'] = (stats['take_true_positives'] / 
+                                       (stats['take_true_positives'] + stats['take_false_negatives'])) * 100 if (stats['take_true_positives'] + stats['take_false_negatives']) > 0 else 0.0
         else:
-            stats['accuracy'] = 0.0
-            
-        if (stats['true_positives'] + stats['false_negatives']) > 0:
-            stats['sensitivity'] = (stats['true_positives'] / 
-                                  (stats['true_positives'] + stats['false_negatives'])) * 100
+            stats['take_accuracy'] = 0.0
+            stats['take_sensitivity'] = 0.0
+
+        # Calculate Review Type metrics
+        review_total_predictions = (stats['review_true_positives'] + stats['review_true_negatives'] + 
+                                  stats['review_false_positives'] + stats['review_false_negatives'])
+
+        if review_total_predictions > 0:
+            stats['review_accuracy'] = ((stats['review_true_positives'] + stats['review_true_negatives']) / 
+                                       review_total_predictions) * 100
+            stats['review_sensitivity'] = (stats['review_true_positives'] / 
+                                         (stats['review_true_positives'] + stats['review_false_negatives'])) * 100 if (stats['review_true_positives'] + stats['review_false_negatives']) > 0 else 0.0
         else:
-            stats['sensitivity'] = 0.0
+            stats['review_accuracy'] = 0.0
+            stats['review_sensitivity'] = 0.0
         
         # Get available event types for filter dropdown
         cursor = conn.execute('''

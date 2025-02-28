@@ -22,7 +22,7 @@ class DataManager:
                     )
                 ''')
                 
-                # New evidence_results table
+                # Updated evidence_results table with review_type
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS evidence_results (
                         id INTEGER PRIMARY KEY,
@@ -44,7 +44,8 @@ class DataManager:
                         processing_status TEXT DEFAULT 'pending',
                         takeup_memo TEXT,
                         takeup_time TIMESTAMP,
-                        takeType INTEGER
+                        takeType INTEGER,
+                        review_type INTEGER
                     )
                 ''')
                 
@@ -112,13 +113,6 @@ class DataManager:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
-                # Determine processing status
-                if detection_results is not None:
-                    processing_status = 'processed'
-                else:
-                    processing_status = 'pending'
-
-                print(evidence_data)
                 # Extract video URL
                 video_url = None
                 # Look for video URL in the files array
@@ -132,18 +126,28 @@ class DataManager:
                 # If no video found in alarmFile, try the legacy videoUrl field
                 if not video_url:
                     video_url = evidence_data.get('videoUrl')
+
+                # Determine processing status
+                # If no video URL is found, mark as 'skipped' instead of 'pending'
+                if not video_url:
+                    processing_status = 'skipped'
+                elif detection_results is not None:
+                    processing_status = 'processed'
+                else:
+                    processing_status = 'pending'
                 
                 logging.debug(f"Extracted video URL: {video_url}")
+                logging.info(f"Setting processing status to: {processing_status} {evidence_data.get('reviewType')}")
                 
-                # Insert main evidence record
+                # Insert main evidence record with review_type
                 cursor.execute('''
                     INSERT OR REPLACE INTO evidence_results (
                         device_id, device_name, alarm_type, alarm_type_value,
                         alarm_time, location, speed, video_url, image_url,
                         is_drowsy, yawn_count, eye_closed_frames,
                         fleet_name, alarm_guid, processing_status,
-                        takeup_memo, takeup_time, takeType
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        takeup_memo, takeup_time, takeType, review_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     evidence_data.get('deviceID'),
                     evidence_data.get('deviceName'),
@@ -162,7 +166,8 @@ class DataManager:
                     processing_status,
                     evidence_data.get('takeupMemo'),
                     evidence_data.get('takeupTime'),
-                    evidence_data.get('takeType')
+                    evidence_data.get('takeType'),
+                    evidence_data.get('reviewType')
                 ))
                 
                 evidence_id = cursor.lastrowid
