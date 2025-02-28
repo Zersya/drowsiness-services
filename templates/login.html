@@ -64,7 +64,23 @@
         }
 
         .form-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .input-field {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+            background-color: #f8fafc;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .pin-input {
@@ -153,7 +169,7 @@
                 <path d="M12 17C14.7614 17 17 14.7614 17 12C17 9.23858 14.7614 7 12 7C9.23858 7 7 9.23858 7 12C7 14.7614 9.23858 17 12 17Z" fill="#2563eb"/>
             </svg>
             <h1>Welcome Back</h1>
-            <p class="subtitle">Enter your PIN to access the dashboard</p>
+            <p class="subtitle">Sign in to access the dashboard</p>
         </div>
 
         {% if error %}
@@ -166,8 +182,18 @@
         {% endif %}
 
         <form method="POST" id="loginForm">
-            <div class="form-group">
-                <input type="password" 
+            {% if auth_type == 'KEYCLOAK' %}
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" class="input-field" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" class="input-field" id="password" name="password" required>
+                </div>
+            {% else %}
+                <div class="form-group">
+                    <input type="password" 
                        class="pin-input"
                        name="pin" 
                        maxlength="6" 
@@ -175,7 +201,8 @@
                        placeholder="Enter 6-digit PIN"
                        autocomplete="current-password"
                        required>
-            </div>
+                </div>
+            {% endif %}
             <button type="submit" class="submit-button" id="submitButton">
                 Login to Dashboard
             </button>
@@ -183,11 +210,6 @@
     </div>
 
     <script>
-        // Ensure only numbers can be entered
-        document.querySelector('.pin-input').addEventListener('input', function(e) {
-            this.value = this.value.replace(/[^0-9]/g, '');
-        });
-
         // Form submission handling
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             const submitButton = document.getElementById('submitButton');
@@ -195,9 +217,9 @@
             submitButton.textContent = 'Logging in...';
         });
 
-        // Focus PIN input on page load
+        // Focus username input on page load
         window.addEventListener('load', function() {
-            document.querySelector('.pin-input').focus();
+            document.querySelector('input[name="username"]').focus();
         });
     </script>
 </body>

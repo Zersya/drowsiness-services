@@ -7,3 +7,5 @@ torch
 torchvision
 ultralytics
 flask
+flask-cors
+python-keycloak==3.0.0

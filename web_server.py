@@ -1,30 +1,79 @@
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask_cors import CORS
 import sqlite3
 from datetime import datetime, timedelta
 import os
 import math
 from dotenv import load_dotenv
 from functools import wraps
+from services.auth_service import KeycloakAuth
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Required for session management
+# Enable CORS for all routes
+CORS(app, supports_credentials=True)
+
+# Set secure cookie
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.secret_key = os.urandom(24)
 
 # Load environment variables
 load_dotenv()
+
+# Authentication configuration
+AUTH_TYPE = os.getenv("AUTH_TYPE", "PIN").upper()  # Default to PIN auth
 WEB_ACCESS_PIN = os.getenv("WEB_ACCESS_PIN", "123456")
 
 # Add max and min functions to template context
 app.jinja_env.globals.update(max=max, min=min)
 
+
 DB_PATH = "drowsiness_detection.db"  # Same as in drowsiness_detector.py
+
+
+# Get port from environment variable or use 8000 as default
+PORT = int(os.getenv('FLASK_PORT', 8000))
+
+# Initialize Keycloak auth if needed
+auth_service = KeycloakAuth() if AUTH_TYPE == "KEYCLOAK" else None
+
+def is_ajax_request():
+    """Check if the request is an AJAX request."""
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+def verify_auth():
+    """Verify authentication based on AUTH_TYPE."""
+    if AUTH_TYPE == "KEYCLOAK":
+        if 'token' not in session:
+            return False
+        try:
+            return auth_service.verify_token(session['token']['access_token'])
+        except:
+            return False
+    else:  # PIN-based auth
+        return session.get('authenticated', False)
 
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'authenticated' not in session:
+        if not verify_auth():
+            if is_ajax_request():
+                return jsonify({'error': 'Unauthorized'}), 401
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
+# Add before_request handler
+@app.before_request
+def before_request():
+    if request.endpoint in ['login', 'static']:
+        return None
+    
+    if not verify_auth():
+        if is_ajax_request():
+            return jsonify({'error': 'Unauthorized'}), 401
+        return redirect(url_for('login'))
 
 def get_db_connection():
     """Create a database connection."""
@@ -34,18 +83,42 @@ def get_db_connection():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    error = None
+    # Check if already authenticated
+    if verify_auth():
+        return redirect(url_for('index'))
+    
     if request.method == 'POST':
-        pin = request.form.get('pin')
-        if pin == WEB_ACCESS_PIN:
-            session['authenticated'] = True
-            return redirect(url_for('index'))
-        error = 'Invalid PIN'
-    return render_template('login.html', error=error)
+        if AUTH_TYPE == "KEYCLOAK":
+            username = request.form.get('username')
+            password = request.form.get('password')
+            
+            result = auth_service.authenticate(username, password)
+            
+            if result['success']:
+                session['token'] = result['token']
+                session['user_info'] = result['user_info']
+                return redirect(url_for('index'))
+            
+            return render_template('login.html', error='Invalid credentials', auth_type=AUTH_TYPE)
+        else:
+            # PIN-based authentication
+            pin = request.form.get('pin')
+            if pin == WEB_ACCESS_PIN:
+                session['authenticated'] = True
+                return redirect(url_for('index'))
+            
+            return render_template('login.html', error='Invalid PIN', auth_type=AUTH_TYPE)
+    
+    return render_template('login.html', auth_type=AUTH_TYPE)
 
 @app.route('/logout')
 def logout():
-    session.pop('authenticated', None)
+    if AUTH_TYPE == "KEYCLOAK" and 'token' in session:
+        try:
+            auth_service.logout(session['token']['refresh_token'])
+        except:
+            pass
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/')
@@ -242,5 +315,32 @@ def index():
     except Exception as e:
         return f"Error: {str(e)}", 500
 
+# Error handlers
+@app.errorhandler(403)
+def forbidden_error(error):
+    if is_ajax_request():  # For AJAX requests
+        return jsonify({'error': 'Forbidden'}), 403
+    return redirect(url_for('login'))
+
+@app.errorhandler(401)
+def unauthorized_error(error):
+    if is_ajax_request():  # For AJAX requests
+        return jsonify({'error': 'Unauthorized'}), 401
+    return redirect(url_for('login'))
+
+@app.errorhandler(404)
+def not_found_error(error):
+    if is_ajax_request():  # For AJAX requests
+        return jsonify({'error': 'Not Found'}), 404
+    if 'token' not in session:
+        return redirect(url_for('login'))
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    if is_ajax_request():  # For AJAX requests
+        return jsonify({'error': 'Internal Server Error'}), 500
+    return render_template('500.html'), 500
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=PORT)
