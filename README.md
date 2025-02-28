@@ -19,11 +19,11 @@ A service that analyzes video feeds to detect driver drowsiness using computer v
 5. Run the service: `python drowsiness_detector.py`
 6. Start the web server: `python web_server.py`
 7. Access the dashboard at `http://localhost:5000`
-8. Login using the PIN configured in your `.env` file (default: 123456)
+8. Login using either PIN or Keycloak credentials (based on your configuration)
 
 ## Features
 
-- Secure dashboard access with PIN-based authentication
+- Flexible authentication system (PIN-based or Keycloak SSO)
 - Real-time drowsiness detection using YOLO-based computer vision
 - Multiple analysis algorithms (Threshold-based, Rate-based, and Probabilistic)
 - Performance monitoring dashboard with confusion matrix
@@ -56,18 +56,62 @@ MIN_BLINK_FRAMES=3
 BLINK_COOLDOWN=15
 EYE_DETECTION_CONFIDENCE=0.6
 
-# Web Interface
-WEB_ACCESS_PIN=123456
+# Authentication Configuration
+AUTH_TYPE=PIN  # Options: PIN or KEYCLOAK
+WEB_ACCESS_PIN=123456  # Only used if AUTH_TYPE=PIN
+
+# Keycloak Configuration (Only used if AUTH_TYPE=KEYCLOAK)
+KEYCLOAK_URL=https://your-keycloak-server/auth
+KEYCLOAK_REALM=your-realm
+KEYCLOAK_CLIENT_ID=your-client-id
+KEYCLOAK_CLIENT_SECRET=your-client-secret
 ```
 
 ## Security Features
 
 ### Dashboard Authentication
-- PIN-based login system
+
+The service supports two authentication methods:
+
+#### 1. PIN-based Authentication
+- Simple 6-digit PIN access
 - Secure session management
 - Automatic session expiration
 - Protection against brute force attempts
 - Configurable PIN through environment variables
+
+To use PIN authentication:
+```env
+AUTH_TYPE=PIN
+WEB_ACCESS_PIN=123456  # Your chosen PIN
+```
+
+#### 2. Keycloak SSO Authentication
+- Enterprise-grade Single Sign-On
+- Role-based access control
+- Token-based authentication
+- Automatic token refresh
+- Secure session management
+
+To use Keycloak authentication:
+```env
+AUTH_TYPE=KEYCLOAK
+KEYCLOAK_URL=https://your-keycloak-server/auth
+KEYCLOAK_REALM=your-realm
+KEYCLOAK_CLIENT_ID=your-client-id
+KEYCLOAK_CLIENT_SECRET=your-client-secret
+```
+
+### Keycloak Setup
+
+1. Create a new client in your Keycloak realm
+2. Set the client protocol to "openid-connect"
+3. Configure the client settings:
+   - Access Type: confidential
+   - Valid Redirect URIs: http://localhost:5000/*
+   - Web Origins: http://localhost:5000
+4. Copy the client secret from the Credentials tab
+5. Update your `.env` file with the Keycloak configuration
 
 ## Implementation Details
 
