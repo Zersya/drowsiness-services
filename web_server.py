@@ -231,7 +231,7 @@ def index():
         stats_query = f'''
             WITH pending_count AS (
                 SELECT COUNT(*) as count
-                FROM evidence_results 
+                FROM evidence_results er
                 WHERE {pending_condition}
                 {" AND " + " AND ".join(conditions) if conditions else ""}
             )
@@ -256,7 +256,9 @@ def index():
             FROM evidence_results er
             {" WHERE " + " AND ".join(conditions) if conditions else ""}
         '''
-        cursor = conn.execute(stats_query, params)
+        # Duplicate the params for both the CTE and main query parts when conditions exist
+        stats_params = params * 2 if conditions else []
+        cursor = conn.execute(stats_query, stats_params)
         stats = dict(cursor.fetchone())
 
         # Calculate Take Type metrics
