@@ -1,4 +1,5 @@
 import logging
+import math
 from abc import ABC, abstractmethod
 
 class DrowsinessAnalyzer(ABC):
@@ -126,10 +127,6 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
                 'is_drowsy_yawns': is_drowsy_yawns
             }
         }
-        
-        
-import math
-import logging
 
 class ProbabilisticAnalyzer(DrowsinessAnalyzer):
     """Probabilistic drowsiness analysis using a sigmoid function."""
