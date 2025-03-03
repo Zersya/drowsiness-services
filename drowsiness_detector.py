@@ -132,11 +132,11 @@ def main():
     try:
         while True:
             try:
-                # current_start_time = data_manager.get_last_fetch_time()
-                # current_end_time = datetime.datetime.now()
+                current_start_time = data_manager.get_last_fetch_time()
+                current_end_time = datetime.datetime.now()
                 
-                current_start_time = datetime.datetime.now() - datetime.timedelta(hours=72)
-                current_end_time = datetime.datetime.now() - datetime.timedelta(hours=48)
+                # current_start_time = datetime.datetime.now() - datetime.timedelta(hours=72)
+                # current_end_time = datetime.datetime.now() - datetime.timedelta(hours=48)
                 
                 if current_start_time >= current_end_time:
                     logging.info("No new time range to fetch. Waiting for next interval.")
