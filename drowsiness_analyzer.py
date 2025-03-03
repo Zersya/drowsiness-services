@@ -214,13 +214,13 @@ def create_analyzer(analyzer_type="threshold", **kwargs):
     elif analyzer_type == "rate":
         eye_closed_percentage_threshold = kwargs.get('eye_closed_percentage_threshold', 20)
         yawn_rate_threshold = kwargs.get('yawn_rate_threshold', 3)
-        fps = kwargs.get('fps', 30)
+        fps = kwargs.get('fps', 20)
         return RateBasedAnalyzer(eye_closed_percentage_threshold, yawn_rate_threshold, fps)
     elif analyzer_type == "probabilistic":
         a = kwargs.get('a', 0.5)
-        b = kwargs.get('b', 5)
+        b = kwargs.get('b', 0.5)
         c = kwargs.get('c', 3)
-        fps = kwargs.get('fps', 30)
+        fps = kwargs.get('fps', 20)
         return ProbabilisticAnalyzer(a, b, c, fps)
     else:
         raise ValueError(f"Unknown analyzer type: {analyzer_type}")

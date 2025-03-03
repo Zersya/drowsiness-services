@@ -71,7 +71,7 @@ class DataManager:
     
     def get_last_fetch_time(self):
         """TODO: REMOVE THIS FOR PRODUCTION"""
-        return datetime.datetime.now() - datetime.timedelta(minutes=430)
+        # return datetime.datetime.now() - datetime.timedelta(hours=3)
         
         """Retrieve the last fetch time from the database."""
         try:
@@ -79,7 +79,7 @@ class DataManager:
                 cursor = conn.cursor()
                 cursor.execute('SELECT last_fetch_time FROM fetch_state ORDER BY id DESC LIMIT 1')
                 result = cursor.fetchone()
-                
+
                 if result:
                     return datetime.datetime.fromisoformat(result[0])
                 else:

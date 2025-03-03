@@ -65,9 +65,11 @@ api_client = ApiClient(
 
 # Initialize the drowsiness analyzer and ML metrics analyzer
 drowsiness_analyzer = create_analyzer(
-    analyzer_type="rate",
-    yawn_threshold=DROWSINESS_THRESHOLD_YAWN,
-    eye_closed_threshold=DROWSINESS_THRESHOLD_EYE_CLOSED
+    analyzer_type="probabilistic",
+    a=0.3, 
+    b=0.7, 
+    c=1.2, 
+    fps=20 
 )
 ml_metrics_analyzer = MLMetricsAnalyzer()
 
@@ -75,6 +77,33 @@ def analyze_drowsiness(yawn_count, eye_closed_frames, total_frames_processed, ta
     """Analyzes detection counts to determine drowsiness and ML metrics."""
     # Get drowsiness analysis
     result = drowsiness_analyzer.analyze(yawn_count, eye_closed_frames, total_frames_processed)
+    
+    # Enhanced eye closure analysis
+    if eye_closed_frames > 0:
+        # Calculate eye closure rate and consecutive frames
+        eye_closure_rate = eye_closed_frames / total_frames_processed
+        
+        # Multi-level threshold system for eye closure
+        if eye_closure_rate >= 0.15:  # Severe drowsiness
+            result['is_drowsy'] = True
+            result['confidence'] = max(result['confidence'], 0.9)  # High confidence
+            result['details']['drowsiness_level'] = 'severe'
+        elif eye_closure_rate >= 0.08:  # Moderate drowsiness
+            result['is_drowsy'] = True
+            result['confidence'] = max(result['confidence'], 0.75)  # Moderate-high confidence
+            result['details']['drowsiness_level'] = 'moderate'
+        elif eye_closure_rate >= 0.05:  # Mild drowsiness
+            result['is_drowsy'] = True
+            result['confidence'] = max(result['confidence'], 0.6)  # Moderate confidence
+            result['details']['drowsiness_level'] = 'mild'
+        
+        # Add detailed metrics
+        result['details']['eye_closure_metrics'] = {
+            'rate': eye_closure_rate,
+            'total_frames_closed': eye_closed_frames,
+            'total_frames': total_frames_processed,
+            'percentage_closed': eye_closure_rate * 100
+        }
     
     # Get ML metrics if take_type is provided
     if take_type is not None:
@@ -84,6 +113,8 @@ def analyze_drowsiness(yawn_count, eye_closed_frames, total_frames_processed, ta
         if result['is_drowsy']:
             logging.warning(
                 f"Drowsiness detected with {result['confidence']*100:.1f}% confidence!\n"
+                f"Level: {result['details'].get('drowsiness_level', 'unknown')}\n"
+                f"Eye Closure: {result['details']['eye_closure_metrics']['percentage_closed']:.1f}%\n"
                 f"ML Metrics - Sensitivity: {ml_metrics['sensitivity']:.1f}%, "
                 f"Accuracy: {ml_metrics['accuracy']:.1f}%\n"
                 f"Details: {result['details']}"
@@ -101,8 +132,11 @@ def main():
     try:
         while True:
             try:
-                current_start_time = data_manager.get_last_fetch_time()
-                current_end_time = datetime.datetime.now()
+                # current_start_time = data_manager.get_last_fetch_time()
+                # current_end_time = datetime.datetime.now()
+                
+                current_start_time = datetime.datetime.now() - datetime.timedelta(hours=72)
+                current_end_time = datetime.datetime.now() - datetime.timedelta(hours=48)
                 
                 if current_start_time >= current_end_time:
                     logging.info("No new time range to fetch. Waiting for next interval.")
