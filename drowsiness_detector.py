@@ -34,9 +34,6 @@ API_ENDPOINT = os.getenv("API_ENDPOINT")
 API_TOKEN = os.getenv("API_TOKEN")
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH")
 FETCH_INTERVAL_SECONDS = int(os.getenv("FETCH_INTERVAL_SECONDS", "300"))  # Default 5 minutes
-DROWSINESS_THRESHOLD_YAWN = int(os.getenv("DROWSINESS_THRESHOLD_YAWN", "3"))
-DROWSINESS_THRESHOLD_EYE_CLOSED = int(os.getenv("DROWSINESS_THRESHOLD_EYE_CLOSED", "10"))
-DROWSINESS_NORMAL_STATE_THRESHOLD = int(os.getenv("DROWSINESS_NORMAL_STATE_THRESHOLD", "60"))
 BASE_URL = os.getenv("BASE_URL")
 USERNAME = os.getenv("USERNAME")
 PASSWORD = os.getenv("PASSWORD")
@@ -51,11 +48,7 @@ if not all([API_ENDPOINT, API_TOKEN, YOLO_MODEL_PATH]):
 
 # Initialize components
 data_manager = DataManager()
-yolo_processor = YoloProcessor(
-    YOLO_MODEL_PATH, 
-    DROWSINESS_THRESHOLD_YAWN, 
-    DROWSINESS_THRESHOLD_EYE_CLOSED
-)
+yolo_processor = YoloProcessor(YOLO_MODEL_PATH)
 api_client = ApiClient(
     BASE_URL,
     API_ENDPOINT,
@@ -67,22 +60,13 @@ api_client = ApiClient(
 # Initialize the drowsiness analyzer and ML metrics analyzer
 drowsiness_analyzer = create_analyzer(
     analyzer_type="rate",
-    yawn_threshold=DROWSINESS_THRESHOLD_YAWN,
-    eye_closed_threshold=DROWSINESS_THRESHOLD_EYE_CLOSED,
-    normal_state_threshold=DROWSINESS_NORMAL_STATE_THRESHOLD,
-    fps=20
 )
 ml_metrics_analyzer = MLMetricsAnalyzer()
 
-def analyze_drowsiness(yawn_count, eye_closed_frames, normal_state_frames, total_frames_processed, take_type=None):
-    """Analyzes detection counts to determine drowsiness and ML metrics."""
+def analyze_drowsiness(detection_results):
+    """Analyzes detection results to determine drowsiness and ML metrics."""
     # Get drowsiness analysis
-    result = drowsiness_analyzer.analyze(
-        yawn_count, 
-        eye_closed_frames, 
-        normal_state_frames,
-        total_frames_processed
-    )
+    result = drowsiness_analyzer.analyze(detection_results)
     
     return result
 
@@ -96,9 +80,6 @@ def main():
     try:
         while True:
             try:
-                # current_start_time = data_manager.get_last_fetch_time()
-                # current_end_time = datetime.datetime.now()
-                
                 current_start_time = datetime.datetime.now() - datetime.timedelta(hours=72)
                 current_end_time = datetime.datetime.now() - datetime.timedelta(hours=48)
                 
@@ -133,35 +114,14 @@ def main():
                                     # Add debug logging to check detection_results
                                     logging.debug(f"Detection results: {detection_results}")
                                     
-                                    # Get take_type from evidence
-                                    take_type = evidence.get('takeType') == 0  # Assuming 0 means True Alarm
+                                    # Analyze drowsiness using the detection_results dictionary
+                                    analysis_result = analyze_drowsiness(detection_results)
                                     
-                                    # Analyze drowsiness using the analyzer
-                                    yawn_count = detection_results.get('yawn_count', 0)
-                                    eye_closed_frames = detection_results.get('eye_closed_frames', 0)
-                                    normal_state_frames = detection_results.get('normal_state_frames', 0)
-                                    total_frames = detection_results.get('total_frames', 0)
-                                    
-                                    # Add debug logging for the values
-                                    logging.info(f"Processing frames - Yawns: {yawn_count}, "
-                                               f"Eye Closed: {eye_closed_frames}, "
-                                               f"Normal State: {normal_state_frames}, "
-                                               f"Total: {total_frames}")
-                                    
-                                    analysis_result = analyze_drowsiness(
-                                        yawn_count, 
-                                        eye_closed_frames,
-                                        normal_state_frames,
-                                        total_frames,
-                                        take_type
-                                    )
-                                    
-                                    # Update detection results with analysis and ensure normal_state_frames is included
+                                    # Update detection results with analysis
                                     detection_results.update({
                                         'is_drowsy': analysis_result['is_drowsy'],
                                         'confidence': analysis_result['confidence'],
-                                        'analysis_details': analysis_result['details'],
-                                        'normal_state_frames': normal_state_frames  # Explicitly include normal_state_frames
+                                        'analysis_details': analysis_result['details']
                                     })
                                     
                                     # Add ML metrics if available
@@ -173,7 +133,11 @@ def main():
                                     
                                     # Enhanced logging for debugging
                                     logging.info(f"Updated evidence result - ID: {evidence_id}, "
-                                               f"Normal State Frames: {detection_results.get('normal_state_frames')}")
+                                                 f"Yawns: {detection_results.get('yawn_count', 0)}, "
+                                                 f"Eye Closed Events: {detection_results.get('eye_closed_frames', 0)}, "
+                                                 f"Total Eye Closed Frames: {detection_results.get('total_eye_closed_frames', 0)}, "
+                                                 f"Max Consecutive Closed: {detection_results.get('max_consecutive_eye_closed', 0)}, "
+                                                 f"Normal State Frames: {detection_results.get('normal_state_frames', 0)}")
 
                                     # Log drowsiness detection
                                     if analysis_result['is_drowsy']:
@@ -194,39 +158,14 @@ def main():
                 pending_evidence = data_manager.get_pending_evidence()
                 logging.info(f"Found {len(pending_evidence)} pending evidence items")
                 
-                # Debug information about pending evidence
-                if not pending_evidence:
-                    logging.warning("No pending evidence found, but database may contain pending items.")
-                    # Let's try to diagnose the issue
-                    try:
-                        # Get a direct count from the database for verification
-                        pending_count = data_manager.get_pending_evidence_count()
-                        logging.info(f"Direct database query shows {pending_count} pending items")
-                        
-                        if pending_count > 0:
-                            logging.warning("Database contains pending items but query returned empty. Possible query issue.")
-                    except Exception as e:
-                        logging.error(f"Error checking pending evidence count: {e}")
-                
-                print(f'Pending evidence: {pending_evidence}')
                 for evidence_id, video_url, device_name in pending_evidence:
                     if video_url:
                         logging.info(f"Processing pending evidence for device: {device_name}")
                         processing_success, detection_results = yolo_processor.process_video(video_url)
                         
                         if processing_success and detection_results:
-                            # Analyze drowsiness for pending evidence
-                            yawn_count = detection_results.get('yawn_count', 0)
-                            eye_closed_frames = detection_results.get('eye_closed_frames', 0)
-                            normal_state_frames = detection_results.get('normal_state_frames', 0)
-                            total_frames = detection_results.get('total_frames', 0)
-                            
-                            analysis_result = analyze_drowsiness(
-                                yawn_count, 
-                                eye_closed_frames,
-                                normal_state_frames,
-                                total_frames
-                            )
+                            # Analyze drowsiness using the detection_results dictionary
+                            analysis_result = analyze_drowsiness(detection_results)
                             
                             # Update detection results with analysis
                             detection_results.update({
@@ -237,6 +176,14 @@ def main():
                             
                             # Update evidence with detection results
                             data_manager.update_evidence_result(evidence_id, detection_results)
+                            
+                            # Enhanced logging for debugging
+                            logging.info(f"Updated pending evidence result - ID: {evidence_id}, "
+                                         f"Yawns: {detection_results.get('yawn_count', 0)}, "
+                                         f"Eye Closed Events: {detection_results.get('eye_closed_frames', 0)}, "
+                                         f"Total Eye Closed Frames: {detection_results.get('total_eye_closed_frames', 0)}, "
+                                         f"Max Consecutive Closed: {detection_results.get('max_consecutive_eye_closed', 0)}, "
+                                         f"Normal State Frames: {detection_results.get('normal_state_frames', 0)}")
                 
                 # Wait for next interval
                 logging.info(f"Waiting {FETCH_INTERVAL_SECONDS} seconds until next fetch...")

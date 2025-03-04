@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 
 class YoloProcessor:
-    def __init__(self, model_path, drowsiness_threshold_yawn, drowsiness_threshold_eye_closed):
+    def __init__(self, model_path, drowsiness_threshold_yawn=6, drowsiness_threshold_eye_closed=35):
         self.model_path = model_path
         self.drowsiness_threshold_yawn = drowsiness_threshold_yawn
         self.drowsiness_threshold_eye_closed = drowsiness_threshold_eye_closed
@@ -123,6 +123,9 @@ class YoloProcessor:
             consecutive_normal_state = 0
             blink_cooldown_counter = 0
             potential_blink_frames = 0
+            # New variables for improved metrics
+            total_eye_closed_frames = 0
+            max_consecutive_eye_closed = 0
 
             cap = cv2.VideoCapture(local_video_path)
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -157,13 +160,13 @@ class YoloProcessor:
                 # Process detections
                 for result in results:
                     # Normal state detection (class 1)
-                    normal_state = result.boxes[result.boxes.cls == 1]  # Class 1 for normal state
+                    normal_state = result.boxes[result.boxes.cls == 1]
                     confident_normal = normal_state[normal_state.conf >= self.confidence_threshold]
                     
                     if len(confident_normal) > 0:
                         normal_state_frames += 1
                         consecutive_normal_state += 1
-                        consecutive_eye_closed = 0  # Reset eye closed counter when normal state detected
+                        consecutive_eye_closed = 0
                     else:
                         consecutive_normal_state = 0
 
@@ -177,9 +180,14 @@ class YoloProcessor:
                     confident_detections = closed_eyes[closed_eyes.conf >= self.confidence_threshold]
                     
                     if len(confident_detections) > 0:
+                        # Increment total eye closed frames
+                        total_eye_closed_frames += 1
                         potential_blink_frames += 1
                         consecutive_eye_closed += 1
-                        consecutive_normal_state = 0  # Reset normal state counter when eyes are closed
+                        # Update maximum consecutive eye closure
+                        if consecutive_eye_closed > max_consecutive_eye_closed:
+                            max_consecutive_eye_closed = consecutive_eye_closed
+                        consecutive_normal_state = 0
                         
                         if max(confident_detections.conf) > 0.8:
                             logging.info(f"High confidence eye closure detected: {max(confident_detections.conf):.2f}")
@@ -198,8 +206,8 @@ class YoloProcessor:
                 if total_processed_frames % 50 == 0:
                     progress = (total_processed_frames / (total_frames/frame_skip)) * 100
                     logging.info(f"Processing progress: {progress:.2f}% - "
-                               f"Yawns: {yawn_count}, Closed Eyes: {eye_closed_frames}, "
-                               f"Normal State: {normal_state_frames}")
+                                f"Yawns: {yawn_count}, Closed Eyes: {eye_closed_frames}, "
+                                f"Normal State: {normal_state_frames}")
 
             cap.release()
 
@@ -214,9 +222,11 @@ class YoloProcessor:
 
             detection_results = {
                 'yawn_count': yawn_count,
-                'eye_closed_frames': eye_closed_frames,
-                'normal_state_frames': normal_state_frames,  # Ensure this is included
+                'eye_closed_frames': eye_closed_frames,  # Retained for compatibility
+                'normal_state_frames': normal_state_frames,
                 'total_frames': total_processed_frames,
+                'total_eye_closed_frames': total_eye_closed_frames,  # New metric
+                'max_consecutive_eye_closed': max_consecutive_eye_closed,  # New metric
                 'early_detection': False,
                 'metrics': {
                     'consecutive_eye_closed': consecutive_eye_closed,
