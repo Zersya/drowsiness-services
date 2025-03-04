@@ -36,6 +36,7 @@ YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH")
 FETCH_INTERVAL_SECONDS = int(os.getenv("FETCH_INTERVAL_SECONDS", "300"))  # Default 5 minutes
 DROWSINESS_THRESHOLD_YAWN = int(os.getenv("DROWSINESS_THRESHOLD_YAWN", "3"))
 DROWSINESS_THRESHOLD_EYE_CLOSED = int(os.getenv("DROWSINESS_THRESHOLD_EYE_CLOSED", "10"))
+DROWSINESS_NORMAL_STATE_THRESHOLD = int(os.getenv("DROWSINESS_NORMAL_STATE_THRESHOLD", "60"))
 BASE_URL = os.getenv("BASE_URL")
 USERNAME = os.getenv("USERNAME")
 PASSWORD = os.getenv("PASSWORD")
@@ -65,60 +66,23 @@ api_client = ApiClient(
 
 # Initialize the drowsiness analyzer and ML metrics analyzer
 drowsiness_analyzer = create_analyzer(
-    analyzer_type="probabilistic",
-    a=0.3, 
-    b=0.7, 
-    c=1.2, 
-    fps=20 
+    analyzer_type="rate",
+    yawn_threshold=DROWSINESS_THRESHOLD_YAWN,
+    eye_closed_threshold=DROWSINESS_THRESHOLD_EYE_CLOSED,
+    normal_state_threshold=DROWSINESS_NORMAL_STATE_THRESHOLD,
+    fps=20
 )
 ml_metrics_analyzer = MLMetricsAnalyzer()
 
-def analyze_drowsiness(yawn_count, eye_closed_frames, total_frames_processed, take_type=None):
+def analyze_drowsiness(yawn_count, eye_closed_frames, normal_state_frames, total_frames_processed, take_type=None):
     """Analyzes detection counts to determine drowsiness and ML metrics."""
     # Get drowsiness analysis
-    result = drowsiness_analyzer.analyze(yawn_count, eye_closed_frames, total_frames_processed)
-    
-    # Enhanced eye closure analysis
-    if eye_closed_frames > 0:
-        # Calculate eye closure rate and consecutive frames
-        eye_closure_rate = eye_closed_frames / total_frames_processed
-        
-        # Multi-level threshold system for eye closure
-        if eye_closure_rate >= 0.15:  # Severe drowsiness
-            result['is_drowsy'] = True
-            result['confidence'] = max(result['confidence'], 0.9)  # High confidence
-            result['details']['drowsiness_level'] = 'severe'
-        elif eye_closure_rate >= 0.08:  # Moderate drowsiness
-            result['is_drowsy'] = True
-            result['confidence'] = max(result['confidence'], 0.75)  # Moderate-high confidence
-            result['details']['drowsiness_level'] = 'moderate'
-        elif eye_closure_rate >= 0.05:  # Mild drowsiness
-            result['is_drowsy'] = True
-            result['confidence'] = max(result['confidence'], 0.6)  # Moderate confidence
-            result['details']['drowsiness_level'] = 'mild'
-        
-        # Add detailed metrics
-        result['details']['eye_closure_metrics'] = {
-            'rate': eye_closure_rate,
-            'total_frames_closed': eye_closed_frames,
-            'total_frames': total_frames_processed,
-            'percentage_closed': eye_closure_rate * 100
-        }
-    
-    # Get ML metrics if take_type is provided
-    if take_type is not None:
-        ml_metrics = ml_metrics_analyzer.analyze(result['is_drowsy'], take_type)
-        result['ml_metrics'] = ml_metrics
-        
-        if result['is_drowsy']:
-            logging.warning(
-                f"Drowsiness detected with {result['confidence']*100:.1f}% confidence!\n"
-                f"Level: {result['details'].get('drowsiness_level', 'unknown')}\n"
-                f"Eye Closure: {result['details']['eye_closure_metrics']['percentage_closed']:.1f}%\n"
-                f"ML Metrics - Sensitivity: {ml_metrics['sensitivity']:.1f}%, "
-                f"Accuracy: {ml_metrics['accuracy']:.1f}%\n"
-                f"Details: {result['details']}"
-            )
+    result = drowsiness_analyzer.analyze(
+        yawn_count, 
+        eye_closed_frames, 
+        normal_state_frames,
+        total_frames_processed
+    )
     
     return result
 
@@ -132,11 +96,11 @@ def main():
     try:
         while True:
             try:
-                current_start_time = data_manager.get_last_fetch_time()
-                current_end_time = datetime.datetime.now()
+                # current_start_time = data_manager.get_last_fetch_time()
+                # current_end_time = datetime.datetime.now()
                 
-                # current_start_time = datetime.datetime.now() - datetime.timedelta(hours=72)
-                # current_end_time = datetime.datetime.now() - datetime.timedelta(hours=48)
+                current_start_time = datetime.datetime.now() - datetime.timedelta(hours=72)
+                current_end_time = datetime.datetime.now() - datetime.timedelta(hours=48)
                 
                 if current_start_time >= current_end_time:
                     logging.info("No new time range to fetch. Waiting for next interval.")
@@ -166,26 +130,38 @@ def main():
                                 processing_success, detection_results = yolo_processor.process_video(video_url)
                                 
                                 if processing_success and detection_results:
+                                    # Add debug logging to check detection_results
+                                    logging.debug(f"Detection results: {detection_results}")
+                                    
                                     # Get take_type from evidence
                                     take_type = evidence.get('takeType') == 0  # Assuming 0 means True Alarm
                                     
                                     # Analyze drowsiness using the analyzer
                                     yawn_count = detection_results.get('yawn_count', 0)
                                     eye_closed_frames = detection_results.get('eye_closed_frames', 0)
+                                    normal_state_frames = detection_results.get('normal_state_frames', 0)
                                     total_frames = detection_results.get('total_frames', 0)
+                                    
+                                    # Add debug logging for the values
+                                    logging.info(f"Processing frames - Yawns: {yawn_count}, "
+                                               f"Eye Closed: {eye_closed_frames}, "
+                                               f"Normal State: {normal_state_frames}, "
+                                               f"Total: {total_frames}")
                                     
                                     analysis_result = analyze_drowsiness(
                                         yawn_count, 
-                                        eye_closed_frames, 
+                                        eye_closed_frames,
+                                        normal_state_frames,
                                         total_frames,
                                         take_type
                                     )
                                     
-                                    # Update detection results with analysis
+                                    # Update detection results with analysis and ensure normal_state_frames is included
                                     detection_results.update({
                                         'is_drowsy': analysis_result['is_drowsy'],
                                         'confidence': analysis_result['confidence'],
-                                        'analysis_details': analysis_result['details']
+                                        'analysis_details': analysis_result['details'],
+                                        'normal_state_frames': normal_state_frames  # Explicitly include normal_state_frames
                                     })
                                     
                                     # Add ML metrics if available
@@ -195,6 +171,10 @@ def main():
                                     # Update evidence with detection results
                                     data_manager.update_evidence_result(evidence_id, detection_results)
                                     
+                                    # Enhanced logging for debugging
+                                    logging.info(f"Updated evidence result - ID: {evidence_id}, "
+                                               f"Normal State Frames: {detection_results.get('normal_state_frames')}")
+
                                     # Log drowsiness detection
                                     if analysis_result['is_drowsy']:
                                         logging.warning(
@@ -238,11 +218,13 @@ def main():
                             # Analyze drowsiness for pending evidence
                             yawn_count = detection_results.get('yawn_count', 0)
                             eye_closed_frames = detection_results.get('eye_closed_frames', 0)
+                            normal_state_frames = detection_results.get('normal_state_frames', 0)
                             total_frames = detection_results.get('total_frames', 0)
                             
                             analysis_result = analyze_drowsiness(
                                 yawn_count, 
-                                eye_closed_frames, 
+                                eye_closed_frames,
+                                normal_state_frames,
                                 total_frames
                             )
                             

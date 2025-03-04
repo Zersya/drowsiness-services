@@ -41,30 +41,35 @@ class MLMetricsAnalyzer:
             false_negatives=self.false_negatives
         )
         
-    def analyze(self, is_drowsy: bool, take_type: Optional[bool] = None) -> Dict:
+    def analyze(self, is_drowsy: Optional[bool], take_type: Optional[bool] = None) -> Dict:
         """
         Analyze ML metrics based on drowsiness detection and take type.
+        Skip cases where is_drowsy is None (no detection)
         
         Args:
-            is_drowsy (bool): Whether drowsiness was detected
+            is_drowsy (Optional[bool]): Whether drowsiness was detected, None if no detection
             take_type (bool): True for true alarm, False for false alarm, None if unknown
-            
+        
         Returns:
             dict: Analysis results with metrics
         """
         metrics_updated = False
         
-        if take_type is not None:
+        # Skip updating metrics if there's no detection (is_drowsy is None)
+        if is_drowsy is not None and take_type is not None:
             if take_type and is_drowsy:
                 self.true_positives += 1
+                metrics_updated = True
             elif take_type and not is_drowsy:
                 self.false_negatives += 1
+                metrics_updated = True
             elif not take_type and is_drowsy:
                 self.false_positives += 1
-            else:
+                metrics_updated = True
+            elif not take_type and not is_drowsy:
                 self.true_negatives += 1
-            metrics_updated = True
-            
+                metrics_updated = True
+
         metrics = self.calculate_metrics()
         
         return {

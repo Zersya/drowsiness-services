@@ -151,6 +151,23 @@
                 margin-bottom: 1rem;
             }
         }
+        /* Add these styles to your existing styles */
+        .table .focus-column {
+            background-color: rgba(248, 249, 250, 0.7) !important; /* Light gray background */
+            border-left: 1px solid #dee2e6;
+            border-right: 1px solid #dee2e6;
+        }
+        
+        /* Hover effect that maintains the focus column background */
+        .table tbody tr:hover .focus-column {
+            background-color: rgba(248, 249, 250, 0.9) !important;
+        }
+        
+        /* Make the header of focus columns stand out slightly */
+        .table thead th.focus-column {
+            background-color: rgba(233, 236, 239, 0.9) !important;
+            border-bottom: 2px solid #dee2e6;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -364,13 +381,25 @@
                             <div class="stats-card card bg-info text-white p-3 mb-3">
                                 <div class="card-body text-center">
                                     <h6 class="card-subtitle mb-2">Accuracy (Drowsy vs Take)</h6>
-                                    <h2 class="card-text">{{ "%.1f"|format(stats.take_accuracy|float) }}%</h2>
+                                    <h2 class="card-text">
+                                        {% if stats and stats.take_accuracy is not none %}
+                                            {{ "%.1f"|format(stats.take_accuracy|float) }}%
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </h2>
                                 </div>
                             </div>
                             <div class="stats-card card bg-success text-white p-3">
                                 <div class="card-body text-center">
                                     <h6 class="card-subtitle mb-2">Sensitivity (Drowsy vs Take)</h6>
-                                    <h2 class="card-text">{{ "%.1f"|format(stats.take_sensitivity|float) }}%</h2>
+                                    <h2 class="card-text">
+                                        {% if stats and stats.take_sensitivity is not none %}
+                                            {{ "%.1f"|format(stats.take_sensitivity|float) }}%
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </h2>
                                 </div>
                             </div>
                         </div>
@@ -461,9 +490,8 @@
                                 <th>Time</th>
                                 <th>Event Type</th>
                                 <th>Speed</th>
-                                <th>Drowsy</th>
-                                <!-- <th>Yawns</th>
-                                <th>Eyes Closed</th> -->
+                                <th class="focus-column">Drowsy</th>
+                                <th class="focus-column">Detection</th>
                                 <th>Status</th>
                                 <th>Take Type</th>
                                 <th>Memo</th>
@@ -479,8 +507,12 @@
                                 <td>{{ event.alarm_time }}</td>
                                 <td>{{ event.alarm_type_value }}</td>
                                 <td>{{ event.speed }} km/h</td>
-                                <td>
-                                    {% if event.is_drowsy is not none %}
+                                <td class="focus-column">
+                                    {% if event.processing_status == 'pending' %}
+                                        <!-- Leave empty for pending status -->
+                                    {% elif (event.yawn_count == 0 or event.yawn_count is none) and (event.eye_closed_frames == 0 or event.eye_closed_frames is none) and (event.normal_state_frames == 0 or event.normal_state_frames is none) %}
+                                        <!-- Leave empty when there's No Detection -->
+                                    {% elif event.is_drowsy is not none %}
                                         <span class="status-badge {% if event.is_drowsy %}drowsy-true{% else %}drowsy-false{% endif %}">
                                             {% if event.is_drowsy %}
                                                 Yes
@@ -490,8 +522,39 @@
                                         </span>
                                     {% endif %}
                                 </td>
-                                <!-- <td>{{ event.yawn_count or 0 }}</td>
-                                <td>{{ event.eye_closed_frames or 0 }}</td> -->
+                                <td class="focus-column">
+                                    {% if event.processing_status == 'pending' %}
+                                        <!-- Leave empty for pending status -->
+                                    {% elif (event.yawn_count == 0 or event.yawn_count is none) and 
+                                            (event.eye_closed_frames == 0 or event.eye_closed_frames is none) and 
+                                            (event.normal_state_frames == 0 or event.normal_state_frames is none) %}
+                                        <span class="badge bg-warning">No Detection</span>
+                                    {% else %}
+                                        <span class="badge bg-info">
+                                            {% if event.yawn_count and event.yawn_count > 0 %}Yawning{% endif %}
+                                            {% if event.yawn_count and event.yawn_count > 0 and event.eye_closed_frames and event.eye_closed_frames > 0 %} & {% endif %}
+                                            {% if event.eye_closed_frames and event.eye_closed_frames > 0 %}Eye Closed{% endif %}
+                                            {% if (event.yawn_count and event.yawn_count > 0) or (event.eye_closed_frames and event.eye_closed_frames > 0) %}
+                                                {% if event.normal_state_frames and event.normal_state_frames > 0 %} & {% endif %}
+                                            {% endif %}
+                                            {% if event.normal_state_frames and event.normal_state_frames > 0 %}Normal State{% endif %}
+                                        </span>
+                                        <br>
+                                        <small class="text-muted">
+                                            {% if event.yawn_count and event.yawn_count > 0 %}
+                                                Yawns: {{ event.yawn_count }}
+                                            {% endif %}
+                                            {% if event.eye_closed_frames and event.eye_closed_frames > 0 %}
+                                                {% if event.yawn_count and event.yawn_count > 0 %} | {% endif %}
+                                                Eyes Closed: {{ event.eye_closed_frames }}
+                                            {% endif %}
+                                            {% if event.normal_state_frames and event.normal_state_frames > 0 %}
+                                                {% if (event.yawn_count and event.yawn_count > 0) or (event.eye_closed_frames and event.eye_closed_frames > 0) %} | {% endif %}
+                                                Normal: {{ event.normal_state_frames }}
+                                            {% endif %}
+                                        </small>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     <span class="badge {% if event.processing_status == 'processed' %}bg-success{% elif event.processing_status == 'failed' %}bg-danger{% else %}bg-warning{% endif %}">
                                         {{ event.processing_status }}
@@ -520,7 +583,7 @@
                                 <td>
                                     {% if event.video_url %}
                                         <button type="button" class="btn btn-sm btn-primary action-btn" 
-                                                onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }})">
+                                                onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }})">
                                             <i class="bx bx-play"></i> Play Video
                                         </button>
                                     {% else %}
@@ -594,45 +657,25 @@
                             Your browser does not support the video tag.
                         </video>
                     </div>
-                    <div class="video-info">
+                    <div class="video-info mt-3">
                         <div class="row">
                             <div class="col-md-6">
-                                <div class="video-info-item">
-                                    <span class="video-info-label">Device:</span>
-                                    <span id="videoDeviceName"></span>
-                                </div>
-                                <div class="video-info-item">
-                                    <span class="video-info-label">Time:</span>
-                                    <span id="videoTime"></span>
-                                </div>
-                                <div class="video-info-item">
-                                    <span class="video-info-label">Event Type:</span>
-                                    <span id="videoEventType"></span>
-                                </div>
+                                <p><strong>Device:</strong> <span id="videoDeviceName"></span></p>
+                                <p><strong>Time:</strong> <span id="videoTime"></span></p>
+                                <p><strong>Event Type:</strong> <span id="videoEventType"></span></p>
+                                <p><strong>Drowsy:</strong> <span id="videoDrowsy"></span></p>
                             </div>
                             <div class="col-md-6">
-                                <div class="video-info-item">
-                                    <span class="video-info-label">Drowsy:</span>
-                                    <span id="videoDrowsy"></span>
-                                </div>
-                                <div class="video-info-item">
-                                    <span class="video-info-label">Yawns:</span>
-                                    <span id="videoYawns"></span>
-                                </div>
-                                <div class="video-info-item">
-                                    <span class="video-info-label">Eyes Closed:</span>
-                                    <span id="videoEyesClosed"></span>
-                                </div>
-                                <div class="video-info-item">
-                                    <span class="video-info-label">Take Type:</span>
-                                    <span id="videoTakeType"></span>
-                                </div>
+                                <p><strong>Yawns:</strong> <span id="videoYawns"></span></p>
+                                <p><strong>Eyes Closed Frames:</strong> <span id="videoEyesClosed"></span></p>
+                                <p><strong>Normal State Frames:</strong> <span id="videoNormalState"></span></p>
+                                <p><strong>Take Type:</strong> <span id="videoTakeType"></span></p>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <a id="downloadButton" href="" class="btn btn-primary" download>
+                    <a id="downloadButton" href="" download class="btn btn-primary">
                         <i class="bx bx-download"></i> Download Video
                     </a>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -664,7 +707,7 @@
         }
 
         // Video modal functions
-        function openVideoModal(videoUrl, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType) {
+        function openVideoModal(videoUrl, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType, normalStateFrames) {
             // Set video source
             const videoPlayer = document.getElementById('videoPlayer');
             videoPlayer.src = videoUrl;
@@ -680,6 +723,7 @@
             document.getElementById('videoDrowsy').textContent = isDrowsy;
             document.getElementById('videoYawns').textContent = yawns;
             document.getElementById('videoEyesClosed').textContent = eyesClosed;
+            document.getElementById('videoNormalState').textContent = normalStateFrames || 0;
             document.getElementById('videoTakeType').textContent = takeType === 0 ? "True Alarm" : 
                                                                   takeType === 1 ? "False Alarm" : "-";
             

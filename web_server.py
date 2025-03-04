@@ -210,6 +210,7 @@ def index():
                 er.is_drowsy,
                 er.yawn_count,
                 er.eye_closed_frames,
+                er.normal_state_frames,
                 er.processing_status,
                 er.fleet_name,
                 er.takeup_memo,

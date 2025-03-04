@@ -22,7 +22,7 @@ class DataManager:
                     )
                 ''')
                 
-                # Updated evidence_results table with review_type
+                # Updated evidence_results table with review_type and normal_state_frames
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS evidence_results (
                         id INTEGER PRIMARY KEY,
@@ -38,6 +38,7 @@ class DataManager:
                         is_drowsy BOOLEAN,
                         yawn_count INTEGER,
                         eye_closed_frames INTEGER,
+                        normal_state_frames INTEGER,
                         processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         fleet_name TEXT,
                         alarm_guid TEXT UNIQUE,
@@ -139,15 +140,15 @@ class DataManager:
                 logging.debug(f"Extracted video URL: {video_url}")
                 logging.info(f"Setting processing status to: {processing_status} {evidence_data.get('reviewType')}")
                 
-                # Insert main evidence record with review_type
+                # Insert main evidence record with normal_state_frames
                 cursor.execute('''
                     INSERT OR REPLACE INTO evidence_results (
                         device_id, device_name, alarm_type, alarm_type_value,
                         alarm_time, location, speed, video_url, image_url,
-                        is_drowsy, yawn_count, eye_closed_frames,
+                        is_drowsy, yawn_count, eye_closed_frames, normal_state_frames,
                         fleet_name, alarm_guid, processing_status,
                         takeup_memo, takeup_time, takeType, review_type
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     evidence_data.get('deviceID'),
                     evidence_data.get('deviceName'),
@@ -161,6 +162,7 @@ class DataManager:
                     detection_results.get('is_drowsy') if detection_results else None,
                     detection_results.get('yawn_count') if detection_results else None,
                     detection_results.get('eye_closed_frames') if detection_results else None,
+                    detection_results.get('normal_state_frames') if detection_results else None,
                     evidence_data.get('fleetName'),
                     evidence_data.get('alarmGuid'),
                     processing_status,
@@ -207,18 +209,20 @@ class DataManager:
                     SET is_drowsy = ?,
                         yawn_count = ?,
                         eye_closed_frames = ?,
+                        normal_state_frames = ?,
                         processing_status = ?
                     WHERE id = ?
                 ''', (
-                    detection_results.get('is_drowsy') if detection_results else None,
-                    detection_results.get('yawn_count') if detection_results else None,
-                    detection_results.get('eye_closed_frames') if detection_results else None,
-                    'processed' if detection_results else 'failed',
+                    detection_results.get('is_drowsy'),
+                    detection_results.get('yawn_count'),
+                    detection_results.get('eye_closed_frames'),
+                    detection_results.get('normal_state_frames'),
+                    'processed',
                     evidence_id
                 ))
                 conn.commit()
-                logging.info(f"Updated evidence ID {evidence_id} with detection results")
-        except Exception as e:
+                logging.info(f"Updated evidence result for ID {evidence_id}")
+        except sqlite3.Error as e:
             logging.error(f"Error updating evidence result: {e}")
     
     def update_evidence_status(self, evidence_id, status):

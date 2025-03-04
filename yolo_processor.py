@@ -83,17 +83,25 @@ class YoloProcessor:
             return None
 
     def process_frame(self, frame):
-        """Process a single frame with appropriate device placement."""
+        """Process a single frame with YOLO model."""
         try:
-            if self.use_cuda and torch.cuda.is_available():
-                # Convert frame to tensor and move to GPU
-                frame_tensor = torch.from_numpy(frame).cuda()
-                results = self.model(frame_tensor)
-                # Move results back to CPU if needed
-                results = [r.cpu() for r in results]
-            else:
-                results = self.model(frame)
+            # Ensure minimum frame size and proper aspect ratio
+            min_size = 640
+            height, width = frame.shape[:2]
+            if height < min_size or width < min_size:
+                scale = max(min_size/width, min_size/height)
+                frame = cv2.resize(frame, None, fx=scale, fy=scale)
+
+            # Apply image enhancement
+            frame = cv2.convertScaleAbs(frame, alpha=1.2, beta=10)
+            
+            results = self.model(frame, verbose=False)
+            
+            if not results:
+                return None
+                
             return results
+            
         except Exception as e:
             logging.error(f"Error processing frame: {e}")
             return None
@@ -101,7 +109,6 @@ class YoloProcessor:
     def process_video(self, video_url):
         """Process video for drowsiness detection and return results."""
         try:
-            # Download video to temporary location
             local_video_path = self.download_video(video_url)
             if not local_video_path:
                 logging.error("Failed to download video")
@@ -110,8 +117,10 @@ class YoloProcessor:
             # Initialize counters
             yawn_count = 0
             eye_closed_frames = 0
+            normal_state_frames = 0
             total_processed_frames = 0
-            consecutive_eye_closed = 0  # Track consecutive frames with closed eyes
+            consecutive_eye_closed = 0
+            consecutive_normal_state = 0
             blink_cooldown_counter = 0
             potential_blink_frames = 0
 
@@ -119,31 +128,61 @@ class YoloProcessor:
             fps = cap.get(cv2.CAP_PROP_FPS)
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
+            if fps <= 0 or total_frames <= 0:
+                logging.error("Invalid video properties")
+                return False, None
+                
             logging.info(f"Processing video: {total_frames} frames at {fps} FPS")
+
+            frame_skip = max(1, int(fps / 10))  # Process 10 frames per second
+            frame_count = 0
 
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
 
-                # Process frame with YOLO model using the new process_frame method
+                frame_count += 1
+                if frame_count % frame_skip != 0:
+                    continue
+
+                if frame is None or frame.size == 0:
+                    continue
+
                 results = self.process_frame(frame)
+                
                 if results is None:
                     continue
-                
+
                 # Process detections
                 for result in results:
-                    # Count yawns
-                    yawn_detections = result.boxes[result.boxes.cls == 2]  # Assuming class 2 is yawn
-                    yawn_count += len(yawn_detections)
+                    # Normal state detection (class 1)
+                    normal_state = result.boxes[result.boxes.cls == 1]  # Class 1 for normal state
+                    confident_normal = normal_state[normal_state.conf >= self.confidence_threshold]
                     
-                    # Improved closed eyes detection
+                    if len(confident_normal) > 0:
+                        normal_state_frames += 1
+                        consecutive_normal_state += 1
+                        consecutive_eye_closed = 0  # Reset eye closed counter when normal state detected
+                    else:
+                        consecutive_normal_state = 0
+
+                    # Yawn detection (class 2)
+                    yawn_detections = result.boxes[result.boxes.cls == 2]
+                    confident_yawns = yawn_detections[yawn_detections.conf >= self.confidence_threshold]
+                    yawn_count += len(confident_yawns)
+                    
+                    # Closed eyes detection (class 0)
                     closed_eyes = result.boxes[result.boxes.cls == 0]
                     confident_detections = closed_eyes[closed_eyes.conf >= self.confidence_threshold]
                     
                     if len(confident_detections) > 0:
                         potential_blink_frames += 1
                         consecutive_eye_closed += 1
+                        consecutive_normal_state = 0  # Reset normal state counter when eyes are closed
+                        
+                        if max(confident_detections.conf) > 0.8:
+                            logging.info(f"High confidence eye closure detected: {max(confident_detections.conf):.2f}")
                     else:
                         if potential_blink_frames >= self.min_blink_frames and blink_cooldown_counter == 0:
                             eye_closed_frames += 1
@@ -154,53 +193,42 @@ class YoloProcessor:
                     if blink_cooldown_counter > 0:
                         blink_cooldown_counter -= 1
 
-                    # Early detection of severe drowsiness
-                    if (yawn_count >= self.drowsiness_threshold_yawn or 
-                        consecutive_eye_closed >= self.drowsiness_threshold_eye_closed):
-                        cap.release()
-                        
-                        # Clean up downloaded video
-                        try:
-                            os.remove(local_video_path)
-                        except Exception as e:
-                            logging.warning(f"Failed to clean up video file: {e}")
-                        
-                        detection_results = {
-                            'is_drowsy': True,
-                            'yawn_count': yawn_count,
-                            'eye_closed_frames': eye_closed_frames,
-                            'total_frames': total_processed_frames,
-                            'early_detection': True
-                        }
-                        return True, detection_results
-                    
                 total_processed_frames += 1
 
-                # Log progress periodically
-                if total_processed_frames % 100 == 0:
-                    progress = (total_processed_frames / total_frames) * 100
-                    logging.info(f"Processing progress: {progress:.2f}%")
+                if total_processed_frames % 50 == 0:
+                    progress = (total_processed_frames / (total_frames/frame_skip)) * 100
+                    logging.info(f"Processing progress: {progress:.2f}% - "
+                               f"Yawns: {yawn_count}, Closed Eyes: {eye_closed_frames}, "
+                               f"Normal State: {normal_state_frames}")
 
             cap.release()
 
-            # Clean up downloaded video
             try:
                 os.remove(local_video_path)
             except Exception as e:
                 logging.warning(f"Failed to clean up video file: {e}")
 
-            # Calculate final drowsiness metrics
-            is_drowsy = (yawn_count >= self.drowsiness_threshold_yawn or 
-                        eye_closed_frames >= self.drowsiness_threshold_eye_closed)
+            if total_processed_frames == 0:
+                logging.error("No frames were processed successfully")
+                return False, None
 
             detection_results = {
-                'is_drowsy': is_drowsy,
                 'yawn_count': yawn_count,
                 'eye_closed_frames': eye_closed_frames,
+                'normal_state_frames': normal_state_frames,  # Ensure this is included
                 'total_frames': total_processed_frames,
-                'early_detection': False
+                'early_detection': False,
+                'metrics': {
+                    'consecutive_eye_closed': consecutive_eye_closed,
+                    'consecutive_normal_state': consecutive_normal_state,
+                    'potential_blink_frames': potential_blink_frames,
+                    'fps': fps,
+                    'processed_frame_ratio': total_processed_frames / total_frames
+                },
+                'processing_status': 'processed'
             }
 
+            logging.info(f"Video processing completed: {detection_results}")
             return True, detection_results
 
         except Exception as e:
