@@ -441,6 +441,11 @@
                             <button type="submit" class="btn btn-sm btn-outline-light">Apply Filters</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="resetFilters()">Reset</button>
                             
+                            <!-- Add Export Button -->
+                            <button type="button" class="btn btn-sm btn-outline-success ms-2" onclick="exportData()">
+                                <i class="bx bx-download"></i> Export Data
+                            </button>
+                            
                             <!-- Preserve pagination when filtering -->
                             <input type="hidden" name="page" value="1">
                         </form>
@@ -768,6 +773,25 @@
                 });
             });
         });
+
+        function exportData() {
+            // Get current filter values
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const eventTypes = Array.from(document.querySelectorAll('input[name="event_type"]:checked'))
+                .map(cb => cb.value);
+            
+            // Construct export URL with current filters
+            let exportUrl = '/export?';
+            if (startDate) exportUrl += `start_date=${startDate}&`;
+            if (endDate) exportUrl += `end_date=${endDate}&`;
+            eventTypes.forEach(type => {
+                exportUrl += `event_type=${type}&`;
+            });
+            
+            // Trigger download
+            window.location.href = exportUrl;
+        }
     </script>
     <style>
         /* Filter controls styling */

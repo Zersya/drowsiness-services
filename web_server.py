@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
 from flask_cors import CORS
 import sqlite3
 from datetime import datetime, timedelta
@@ -7,6 +7,8 @@ import math
 from dotenv import load_dotenv
 from functools import wraps
 from services.auth_service import KeycloakAuth
+import csv
+from io import StringIO
 
 app = Flask(__name__)
 # Enable CORS for all routes
@@ -316,6 +318,127 @@ def index():
                              
     except Exception as e:
         return f"Error: {str(e)}", 500
+
+@app.route('/export')
+@login_required
+def export_data():
+    try:
+        conn = get_db_connection()
+        
+        # Get filter parameters
+        event_types = request.args.getlist('event_type')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Set default event types if none are provided
+        if not event_types:
+            event_types = ['yawning', 'eye_closed']
+            
+        # Initialize params list for SQL queries
+        params = []
+        conditions = []
+        
+        # Add date range conditions
+        if start_date:
+            conditions.append("DATE(er.alarm_time) >= DATE(?)")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(er.alarm_time) <= DATE(?)")
+            params.append(end_date)
+        
+        # Add event type conditions
+        if event_types and 'all' not in event_types:
+            event_conditions = []
+            for event_type in event_types:
+                if event_type == 'yawning':
+                    event_conditions.append("er.alarm_type_value LIKE '%Yawn%'")
+                elif event_type == 'eye_closed':
+                    event_conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
+            
+            if event_conditions:
+                conditions.append("(" + " OR ".join(event_conditions) + ")")
+        
+        # Construct the WHERE clause
+        where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+        
+        # Get all filtered evidence results
+        query = f'''
+            SELECT 
+                er.device_name,
+                er.alarm_time,
+                er.alarm_type_value as event_type,
+                er.speed,
+                er.is_drowsy,
+                er.yawn_count,
+                er.eye_closed_frames,
+                er.processing_status,
+                CASE 
+                    WHEN er.takeType = 0 THEN 'True Alarm'
+                    WHEN er.takeType = 1 THEN 'False Alarm'
+                    ELSE '-'
+                END as take_type,
+                er.takeup_memo as memo,
+                er.takeup_time as memo_time,
+                CASE 
+                    WHEN er.review_type = 0 THEN 'True Alarm'
+                    WHEN er.review_type = 1 THEN 'False Alarm'
+                    ELSE '-'
+                END as review_type,
+                er.video_url
+            FROM evidence_results er
+            {where_clause}
+            ORDER BY er.alarm_time DESC
+        '''
+        
+        cursor = conn.execute(query, params)
+        results = cursor.fetchall()
+        
+        # Create CSV in memory
+        si = StringIO()
+        writer = csv.writer(si)
+        
+        # Write headers
+        writer.writerow([
+            'Device', 'Time', 'Event Type', 'Speed (km/h)', 'Drowsy',
+            'Yawn Count', 'Eyes Closed Frames', 'Status', 'Take Type',
+            'Memo', 'Memo Time', 'Review Type', 'Video URL'
+        ])
+        
+        # Write data
+        for row in results:
+            writer.writerow([
+                row['device_name'],
+                row['alarm_time'],
+                row['event_type'],
+                row['speed'],
+                'Yes' if row['is_drowsy'] else 'No',
+                row['yawn_count'] or 0,
+                row['eye_closed_frames'] or 0,
+                row['processing_status'],
+                row['take_type'],
+                row['memo'] or '-',
+                row['memo_time'] or '-',
+                row['review_type'],
+                row['video_url'] or '-'
+            ])
+        
+        # Create response
+        output = si.getvalue()
+        si.close()
+        
+        return Response(
+            output,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': 'attachment; filename=dashboard_export.csv',
+                'Content-Type': 'text/csv'
+            }
+        )
+        
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+    finally:
+        conn.close()
 
 # Error handlers
 @app.errorhandler(403)
