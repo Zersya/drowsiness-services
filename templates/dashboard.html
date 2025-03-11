@@ -157,12 +157,12 @@
             border-left: 1px solid #dee2e6;
             border-right: 1px solid #dee2e6;
         }
-        
+
         /* Hover effect that maintains the focus column background */
         .table tbody tr:hover .focus-column {
             background-color: rgba(248, 249, 250, 0.9) !important;
         }
-        
+
         /* Make the header of focus columns stand out slightly */
         .table thead th.focus-column {
             background-color: rgba(233, 236, 239, 0.9) !important;
@@ -178,11 +178,11 @@
     </nav>
 
     <div style="text-align: right; padding: 1rem;">
-        <a href="{{ url_for('logout') }}" 
-           style="padding: 0.5rem 1rem; 
-                  background-color: #dc3545; 
-                  color: white; 
-                  text-decoration: none; 
+        <a href="{{ url_for('logout') }}"
+           style="padding: 0.5rem 1rem;
+                  background-color: #dc3545;
+                  color: white;
+                  text-decoration: none;
                   border-radius: 4px;">
             Logout
         </a>
@@ -289,8 +289,12 @@
                         <input type="radio" class="btn-check" name="analysisType" id="takeDrowsy" value="takeDrowsy" checked>
                         <label class="btn btn-outline-light" for="takeDrowsy">Drowsy vs Take Type</label>
                         
+                        <input type="radio" class="btn-check" name="analysisType" id="ourTake" value="ourTake">
+                        <label class="btn btn-outline-light" for="ourTake">Our Type vs Take Type</label>
+                        
                         <input type="radio" class="btn-check" name="analysisType" id="takeReview" value="takeReview">
                         <label class="btn btn-outline-light" for="takeReview">Review Type vs Take Type</label>
+
                     </div>
                     <span class="badge bg-info ms-2">Metrics</span>
                 </div>
@@ -336,7 +340,7 @@
                                         </tr>
                                     </tbody>
                                 </table>
-                                
+
                                 <!-- Take vs Review Matrix -->
                                 <table class="table table-bordered confusion-matrix d-none" id="takeReviewMatrix">
                                     <thead>
@@ -367,6 +371,53 @@
                                             <td class="text-center bg-success-light">
                                                 <strong>{{ stats.review_true_negatives }}</strong>
                                                 <div class="small">True Negatives</div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <!-- Our Type vs Take Type Matrix -->
+                                <table class="table table-bordered confusion-matrix d-none" id="ourTakeMatrix">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th class="text-center">Detection Values Match Expectation</th>
+                                            <th class="text-center">Detection Values Don't Match Expectation</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <th>Actually Drowsy</th>
+                                            <td class="text-center bg-success-light">
+                                                <strong>{{ stats.our_true_positives }}</strong>
+                                                <div class="small">True Positives <i class="bx bx-info-circle text-info"
+                                                    data-bs-toggle="tooltip"
+                                                    data-bs-html="true"
+                                                    title="(Normal state frames highest & takeType=False) OR<br>(Yawn alarm & yawn_count highest & takeType=True) OR<br>(Eye closed alarm & eye_closed highest & takeType=True)"></i></div>
+                                            </td>
+                                            <td class="text-center bg-danger-light">
+                                                <strong>{{ stats.our_false_negatives }}</strong>
+                                                <div class="small">False Negatives <i class="bx bx-info-circle text-info"
+                                                    data-bs-toggle="tooltip"
+                                                    data-bs-html="true"
+                                                    title="(Detection values don't match alarm type OR<br>normal state not highest when it should be)"></i></div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th>Actually Not Drowsy</th>
+                                            <td class="text-center bg-danger-light">
+                                                <strong>{{ stats.our_false_positives }}</strong>
+                                                <div class="small">False Positives <i class="bx bx-info-circle text-info"
+                                                    data-bs-toggle="tooltip"
+                                                    data-bs-html="true"
+                                                    title="(Normal state highest but takeType=True) OR<br>(Detection values match alarm type but takeType=False)"></i></div>
+                                            </td>
+                                            <td class="text-center bg-success-light">
+                                                <strong>{{ stats.our_true_negatives }}</strong>
+                                                <div class="small">True Negatives <i class="bx bx-info-circle text-info"
+                                                    data-bs-toggle="tooltip"
+                                                    data-bs-html="true"
+                                                    title="(Detection values don't match alarm type AND takeType=False) OR<br>(No significant detection values AND takeType=False)"></i></div>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -403,7 +454,7 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <!-- Take vs Review Metrics -->
                         <div id="takeReviewMetrics" class="d-none">
                             <div class="stats-card card bg-info text-white p-3 mb-3">
@@ -416,6 +467,34 @@
                                 <div class="card-body text-center">
                                     <h6 class="card-subtitle mb-2">Sensitivity (Review vs Take)</h6>
                                     <h2 class="card-text">{{ "%.1f"|format(stats.review_sensitivity|float) }}%</h2>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Our Type vs Take Type Metrics -->
+                        <div id="ourTakeMetrics" class="d-none">
+                            <div class="stats-card card bg-info text-white p-3 mb-3">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2">Accuracy (Alarm Type vs Detection)</h6>
+                                    <h2 class="card-text">
+                                        {% if stats and stats.our_accuracy is not none %}
+                                            {{ "%.1f"|format(stats.our_accuracy|float) }}%
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </h2>
+                                </div>
+                            </div>
+                            <div class="stats-card card bg-success text-white p-3">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2">Sensitivity (Alarm Type vs Detection)</h6>
+                                    <h2 class="card-text">
+                                        {% if stats and stats.our_sensitivity is not none %}
+                                            {{ "%.1f"|format(stats.our_sensitivity|float) }}%
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </h2>
                                 </div>
                             </div>
                         </div>
@@ -435,46 +514,46 @@
                             <div class="date-range-filter me-3 mb-2 mb-md-0">
                                 <div class="input-group">
                                     <span class="input-group-text bg-dark text-white border-secondary">From</span>
-                                    <input type="date" class="form-control form-control-sm bg-dark text-white border-secondary" 
-                                           id="startDate" name="start_date" 
+                                    <input type="date" class="form-control form-control-sm bg-dark text-white border-secondary"
+                                           id="startDate" name="start_date"
                                            value="{{ filters.start_date if filters.start_date else '' }}">
                                     <span class="input-group-text bg-dark text-white border-secondary">To</span>
-                                    <input type="date" class="form-control form-control-sm bg-dark text-white border-secondary" 
-                                           id="endDate" name="end_date" 
+                                    <input type="date" class="form-control form-control-sm bg-dark text-white border-secondary"
+                                           id="endDate" name="end_date"
                                            value="{{ filters.end_date if filters.end_date else '' }}">
                                 </div>
                             </div>
-                            
+
                             <!-- Existing Event Type Filters -->
                             <div class="event-type-filters me-3">
                                 <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="checkbox" id="allEvents" name="event_type" value="all" 
+                                    <input class="form-check-input" type="checkbox" id="allEvents" name="event_type" value="all"
                                            {% if not filters.event_types or ('all' in filters.event_types and not 'yawning' in filters.event_types and not 'eye_closed' in filters.event_types) %}checked{% endif %}
                                            onchange="handleAllEventsChange(this)">
                                     <label class="form-check-label text-white" for="allEvents">All Events</label>
                                 </div>
                                 <div class="form-check form-check-inline">
-                                    <input class="form-check-input event-type-checkbox" type="checkbox" id="yawningEvents" name="event_type" value="yawning" 
+                                    <input class="form-check-input event-type-checkbox" type="checkbox" id="yawningEvents" name="event_type" value="yawning"
                                            {% if not filters.event_types or 'yawning' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
                                            onchange="handleEventTypeChange()">
                                     <label class="form-check-label text-white" for="yawningEvents">Yawning</label>
                                 </div>
                                 <div class="form-check form-check-inline">
-                                    <input class="form-check-input event-type-checkbox" type="checkbox" id="eyeClosedEvents" name="event_type" value="eye_closed" 
+                                    <input class="form-check-input event-type-checkbox" type="checkbox" id="eyeClosedEvents" name="event_type" value="eye_closed"
                                            {% if not filters.event_types or 'eye_closed' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
                                            onchange="handleEventTypeChange()">
                                     <label class="form-check-label text-white" for="eyeClosedEvents">Eye Closed</label>
                                 </div>
                             </div>
-                            
+
                             <button type="submit" class="btn btn-sm btn-outline-light">Apply Filters</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="resetFilters()">Reset</button>
-                            
+
                             <!-- Add Export Button -->
                             <button type="button" class="btn btn-sm btn-outline-success ms-2" onclick="exportData()">
                                 <i class="bx bx-download"></i> Export Data
                             </button>
-                            
+
                             <!-- Preserve pagination when filtering -->
                             <input type="hidden" name="page" value="1">
                         </form>
@@ -525,8 +604,8 @@
                                 <td class="focus-column">
                                     {% if event.processing_status == 'pending' %}
                                         <!-- Leave empty for pending status -->
-                                    {% elif (event.yawn_count == 0 or event.yawn_count is none) and 
-                                            (event.eye_closed_frames == 0 or event.eye_closed_frames is none) and 
+                                    {% elif (event.yawn_count == 0 or event.yawn_count is none) and
+                                            (event.eye_closed_frames == 0 or event.eye_closed_frames is none) and
                                             (event.normal_state_frames == 0 or event.normal_state_frames is none) %}
                                         <span class="badge bg-warning">No Detection</span>
                                     {% else %}
@@ -582,7 +661,7 @@
                                 </td>
                                 <td>
                                     {% if event.video_url %}
-                                        <button type="button" class="btn btn-sm btn-primary action-btn" 
+                                        <button type="button" class="btn btn-sm btn-primary action-btn"
                                                 onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }})">
                                             <i class="bx bx-play"></i> Play Video
                                         </button>
@@ -611,13 +690,13 @@
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
-                        
+
                         {% for p in range(max(1, pagination.page - 2), min(pagination.total_pages + 1, pagination.page + 3)) %}
                         <li class="page-item {% if p == pagination.page %}active{% endif %}">
                             <a class="page-link" href="?page={{ p }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}">{{ p }}</a>
                         </li>
                         {% endfor %}
-                        
+
                         <li class="page-item {% if pagination.page == pagination.total_pages %}disabled{% endif %}">
                             <a class="page-link" href="?page={{ pagination.page + 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
@@ -632,8 +711,8 @@
                 </nav>
                 <div class="text-center mt-2">
                     <small class="text-muted">
-                        Showing {{ (pagination.page - 1) * pagination.per_page + 1 }} 
-                        to {{ min(pagination.page * pagination.per_page, pagination.total_records) }} 
+                        Showing {{ (pagination.page - 1) * pagination.per_page + 1 }}
+                        to {{ min(pagination.page * pagination.per_page, pagination.total_records) }}
                         of {{ pagination.total_records }} entries
                     </small>
                 </div>
@@ -711,11 +790,11 @@
             // Set video source
             const videoPlayer = document.getElementById('videoPlayer');
             videoPlayer.src = videoUrl;
-            
+
             // Set download link
             const downloadButton = document.getElementById('downloadButton');
             downloadButton.href = videoUrl;
-            
+
             // Set video info
             document.getElementById('videoDeviceName').textContent = deviceName;
             document.getElementById('videoTime').textContent = time;
@@ -724,20 +803,20 @@
             document.getElementById('videoYawns').textContent = yawns;
             document.getElementById('videoEyesClosed').textContent = eyesClosed;
             document.getElementById('videoNormalState').textContent = normalStateFrames || 0;
-            document.getElementById('videoTakeType').textContent = takeType === 0 ? "True Alarm" : 
+            document.getElementById('videoTakeType').textContent = takeType === 0 ? "True Alarm" :
                                                                   takeType === 1 ? "False Alarm" : "-";
-            
+
             // Show modal
             const videoModal = new bootstrap.Modal(document.getElementById('videoModal'));
             videoModal.show();
-            
+
             // Auto-play video when modal is shown
             document.getElementById('videoModal').addEventListener('shown.bs.modal', function () {
                 videoPlayer.play().catch(e => {
                     console.log('Auto-play prevented by browser:', e);
                 });
             });
-            
+
             // Pause video when modal is closed
             document.getElementById('videoModal').addEventListener('hidden.bs.modal', function () {
                 videoPlayer.pause();
@@ -750,14 +829,14 @@
             // Set default behavior - check both specific event types if nothing is selected
             const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
             const allEventsChecked = document.getElementById('allEvents').checked;
-            
+
             if (!anyEventTypeChecked && !allEventsChecked) {
                 document.querySelectorAll('.event-type-checkbox').forEach(cb => {
                     cb.checked = true;
                 });
                 document.getElementById('allEvents').checked = false;
             }
-            
+
             handleEventTypeChange();
         });
 
@@ -776,41 +855,57 @@
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('startDate').max = today;
             document.getElementById('endDate').max = today;
-            
+
             // Ensure end date is not before start date
             document.getElementById('startDate').addEventListener('change', function() {
                 document.getElementById('endDate').min = this.value;
             });
-            
+
             // Ensure start date is not after end date
             document.getElementById('endDate').addEventListener('change', function() {
                 document.getElementById('startDate').max = this.value;
+            });
+
+            // Initialize tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
             });
         });
 
         // Add this JavaScript to handle the toggle
         document.addEventListener('DOMContentLoaded', function() {
             const radioButtons = document.querySelectorAll('input[name="analysisType"]');
-            
+
             function updateDisplay(value) {
                 const takeDrowsyMatrix = document.getElementById('takeDrowsyMatrix');
                 const takeReviewMatrix = document.getElementById('takeReviewMatrix');
+                const ourTakeMatrix = document.getElementById('ourTakeMatrix');
                 const takeDrowsyMetrics = document.getElementById('takeDrowsyMetrics');
                 const takeReviewMetrics = document.getElementById('takeReviewMetrics');
-                
+                const ourTakeMetrics = document.getElementById('ourTakeMetrics');
+
+                // Hide all matrices and metrics first
+                takeDrowsyMatrix.classList.add('d-none');
+                takeReviewMatrix.classList.add('d-none');
+                ourTakeMatrix.classList.add('d-none');
+                takeDrowsyMetrics.classList.add('d-none');
+                takeReviewMetrics.classList.add('d-none');
+                ourTakeMetrics.classList.add('d-none');
+
+                // Show the selected matrix and metrics
                 if (value === 'takeDrowsy') {
                     takeDrowsyMatrix.classList.remove('d-none');
                     takeDrowsyMetrics.classList.remove('d-none');
-                    takeReviewMatrix.classList.add('d-none');
-                    takeReviewMetrics.classList.add('d-none');
-                } else {
-                    takeDrowsyMatrix.classList.add('d-none');
-                    takeDrowsyMetrics.classList.add('d-none');
+                } else if (value === 'takeReview') {
                     takeReviewMatrix.classList.remove('d-none');
                     takeReviewMetrics.classList.remove('d-none');
+                } else if (value === 'ourTake') {
+                    ourTakeMatrix.classList.remove('d-none');
+                    ourTakeMetrics.classList.remove('d-none');
                 }
             }
-            
+
             radioButtons.forEach(radio => {
                 radio.addEventListener('change', (e) => {
                     updateDisplay(e.target.value);
@@ -824,7 +919,7 @@
             const endDate = document.getElementById('endDate').value;
             const eventTypes = Array.from(document.querySelectorAll('input[name="event_type"]:checked'))
                 .map(cb => cb.value);
-            
+
             // Construct export URL with current filters
             let exportUrl = '/export?';
             if (startDate) exportUrl += `start_date=${startDate}&`;
@@ -832,7 +927,7 @@
             eventTypes.forEach(type => {
                 exportUrl += `event_type=${type}&`;
             });
-            
+
             // Trigger download
             window.location.href = exportUrl;
         }
@@ -843,21 +938,21 @@
             display: flex;
             align-items: center;
         }
-        
+
         .filter-controls .form-check-input {
             background-color: #343a40;
             border-color: #6c757d;
         }
-        
+
         .filter-controls .form-check-input:checked {
             background-color: #0d6efd;
             border-color: #0d6efd;
         }
-        
+
         .filter-controls .form-check-label {
             font-size: 0.9rem;
         }
-        
+
         .filter-controls .btn-outline-light {
             font-size: 0.85rem;
             padding: 0.25rem 0.5rem;

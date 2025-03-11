@@ -71,7 +71,7 @@ def login_required(f):
 def before_request():
     if request.endpoint in ['login', 'static']:
         return None
-    
+
     if not verify_auth():
         if is_ajax_request():
             return jsonify({'error': 'Unauthorized'}), 401
@@ -88,19 +88,19 @@ def login():
     # Check if already authenticated
     if verify_auth():
         return redirect(url_for('index'))
-    
+
     if request.method == 'POST':
         if AUTH_TYPE == "KEYCLOAK":
             username = request.form.get('username')
             password = request.form.get('password')
-            
+
             result = auth_service.authenticate(username, password)
-            
+
             if result['success']:
                 session['token'] = result['token']
                 session['user_info'] = result['user_info']
                 return redirect(url_for('index'))
-            
+
             return render_template('login.html', error='Invalid credentials', auth_type=AUTH_TYPE)
         else:
             # PIN-based authentication
@@ -108,9 +108,9 @@ def login():
             if pin == WEB_ACCESS_PIN:
                 session['authenticated'] = True
                 return redirect(url_for('index'))
-            
+
             return render_template('login.html', error='Invalid PIN', auth_type=AUTH_TYPE)
-    
+
     return render_template('login.html', auth_type=AUTH_TYPE)
 
 @app.route('/logout')
@@ -129,24 +129,24 @@ def index():
     """Render the main dashboard page."""
     try:
         conn = get_db_connection()
-        
+
         # Pagination parameters
         page = request.args.get('page', 1, type=int)
         per_page = 10  # Number of items per page
         offset = (page - 1) * per_page
-        
+
         # Filter parameters - get multiple event types
         event_types = request.args.getlist('event_type')
 
         # Set default event types if none are provided
         if not event_types:
             event_types = ['yawning', 'eye_closed']
-        
+
         # Get latest fetch time
         cursor = conn.execute('''
-            SELECT last_fetch_time 
-            FROM fetch_state 
-            ORDER BY id DESC 
+            SELECT last_fetch_time
+            FROM fetch_state
+            ORDER BY id DESC
             LIMIT 1
         ''')
         last_fetch = cursor.fetchone()
@@ -155,13 +155,13 @@ def index():
         # Get date range filters
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        
+
         # Initialize params list for SQL queries
         params = []
-        
+
         # Base query conditions
         conditions = []
-        
+
         # Add date range conditions
         if start_date:
             conditions.append("DATE(er.alarm_time) >= DATE(?)")
@@ -169,7 +169,7 @@ def index():
         if end_date:
             conditions.append("DATE(er.alarm_time) <= DATE(?)")
             params.append(end_date)
-        
+
         # Add event type conditions
         if event_types and 'all' not in event_types:
             event_conditions = []
@@ -178,16 +178,16 @@ def index():
                     event_conditions.append("er.alarm_type_value LIKE '%Yawn%'")
                 elif event_type == 'eye_closed':
                     event_conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
-            
+
             if event_conditions:
                 conditions.append("(" + " OR ".join(event_conditions) + ")")
-        
+
         # Construct the WHERE clause
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
-        
+
         # Get total count of evidence results with filters applied
         count_query = f'''
-            SELECT COUNT(*) as total 
+            SELECT COUNT(*) as total
             FROM evidence_results er
             {where_clause}
         '''
@@ -197,7 +197,7 @@ def index():
 
         # Get paginated evidence results with filters applied
         results_query = f'''
-            SELECT 
+            SELECT
                 er.id,
                 er.device_id,
                 er.device_name,
@@ -226,7 +226,7 @@ def index():
         results_params = params + [per_page, offset]
         cursor = conn.execute(results_query, results_params)
         evidence_results = cursor.fetchall()
-        
+
         # First, let's create a base condition for pending events that will be used consistently
         pending_condition = "processing_status = 'pending' AND video_url IS NOT NULL"
 
@@ -238,7 +238,7 @@ def index():
                 WHERE {pending_condition}
                 {" AND " + " AND ".join(conditions) if conditions else ""}
             )
-            SELECT 
+            SELECT
                 COUNT(*) as total_events,
                 COUNT(DISTINCT device_name) as unique_devices,
                 COUNT(DISTINCT fleet_name) as unique_fleets,
@@ -255,7 +255,44 @@ def index():
                 COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as review_true_positives,
                 COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as review_false_positives,
                 COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as review_true_negatives,
-                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as review_false_negatives
+                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as review_false_negatives,
+                -- Our Type vs Take Type metrics (based on alarm_type_value and detection values)
+                COALESCE(SUM(CASE
+                    -- Normal state is highest and takeType = 1 (False Alarm) - this is a true positive for normal state
+                    WHEN normal_state_frames > yawn_count AND normal_state_frames > eye_closed_frames AND takeType = 1 THEN 1
+                    -- Yawn alarm and yawn_count is highest
+                    WHEN alarm_type_value LIKE '%Yawn%' AND yawn_count > eye_closed_frames AND yawn_count >= normal_state_frames AND takeType = 0 THEN 1
+                    -- Eye closed alarm and eye_closed_frames is highest
+                    WHEN alarm_type_value LIKE '%Eye closed%' AND eye_closed_frames >= yawn_count AND eye_closed_frames >= normal_state_frames AND takeType = 0 THEN 1
+                    ELSE 0
+                END), 0) as our_true_positives,
+                COALESCE(SUM(CASE
+                    -- Normal state is highest but takeType = 0 (True Alarm) - this is a false positive for normal state
+                    WHEN normal_state_frames > yawn_count AND normal_state_frames > eye_closed_frames AND takeType = 0 THEN 1
+                    -- Yawn alarm and yawn_count is highest but takeType = 1 (False Alarm)
+                    WHEN alarm_type_value LIKE '%Yawn%' AND yawn_count > eye_closed_frames AND yawn_count >= normal_state_frames AND takeType = 1 THEN 1
+                    -- Eye closed alarm and eye_closed_frames is highest but takeType = 1 (False Alarm)
+                    WHEN alarm_type_value LIKE '%Eye closed%' AND eye_closed_frames >= yawn_count AND eye_closed_frames >= normal_state_frames AND takeType = 1 THEN 1
+                    ELSE 0
+                END), 0) as our_false_positives,
+                COALESCE(SUM(CASE
+                    -- Yawn alarm but yawn_count is not highest and takeType = 1 (False Alarm)
+                    WHEN alarm_type_value LIKE '%Yawn%' AND (yawn_count <= eye_closed_frames OR yawn_count < normal_state_frames) AND takeType = 1 THEN 1
+                    -- Eye closed alarm but eye_closed_frames is not highest and takeType = 1 (False Alarm)
+                    WHEN alarm_type_value LIKE '%Eye closed%' AND (eye_closed_frames < yawn_count OR eye_closed_frames < normal_state_frames) AND takeType = 1 THEN 1
+                    -- No detection at all and takeType = 1 (False Alarm)
+                    WHEN (yawn_count = 0 OR yawn_count IS NULL) AND (eye_closed_frames = 0 OR eye_closed_frames IS NULL) AND (normal_state_frames = 0 OR normal_state_frames IS NULL) AND takeType = 1 THEN 1
+                    ELSE 0
+                END), 0) as our_true_negatives,
+                COALESCE(SUM(CASE
+                    -- Yawn alarm but yawn_count is not highest and takeType = 0 (True Alarm)
+                    WHEN alarm_type_value LIKE '%Yawn%' AND (yawn_count <= eye_closed_frames OR yawn_count < normal_state_frames) AND takeType = 0 THEN 1
+                    -- Eye closed alarm but eye_closed_frames is not highest and takeType = 0 (True Alarm)
+                    WHEN alarm_type_value LIKE '%Eye closed%' AND (eye_closed_frames < yawn_count OR eye_closed_frames < normal_state_frames) AND takeType = 0 THEN 1
+                    -- No detection at all and takeType = 0 (True Alarm)
+                    WHEN (yawn_count = 0 OR yawn_count IS NULL) AND (eye_closed_frames = 0 OR eye_closed_frames IS NULL) AND (normal_state_frames = 0 OR normal_state_frames IS NULL) AND takeType = 0 THEN 1
+                    ELSE 0
+                END), 0) as our_false_negatives
             FROM evidence_results er
             {" WHERE " + " AND ".join(conditions) if conditions else ""}
         '''
@@ -265,31 +302,44 @@ def index():
         stats = dict(cursor.fetchone())
 
         # Calculate Take Type metrics
-        take_total_predictions = (stats['take_true_positives'] + stats['take_true_negatives'] + 
+        take_total_predictions = (stats['take_true_positives'] + stats['take_true_negatives'] +
                                  stats['take_false_positives'] + stats['take_false_negatives'])
 
         if take_total_predictions > 0:
-            stats['take_accuracy'] = ((stats['take_true_positives'] + stats['take_true_negatives']) / 
+            stats['take_accuracy'] = ((stats['take_true_positives'] + stats['take_true_negatives']) /
                                      take_total_predictions) * 100
-            stats['take_sensitivity'] = (stats['take_true_positives'] / 
+            stats['take_sensitivity'] = (stats['take_true_positives'] /
                                        (stats['take_true_positives'] + stats['take_false_negatives'])) * 100 if (stats['take_true_positives'] + stats['take_false_negatives']) > 0 else 0.0
         else:
             stats['take_accuracy'] = 0.0
             stats['take_sensitivity'] = 0.0
 
         # Calculate Review Type metrics
-        review_total_predictions = (stats['review_true_positives'] + stats['review_true_negatives'] + 
+        review_total_predictions = (stats['review_true_positives'] + stats['review_true_negatives'] +
                                   stats['review_false_positives'] + stats['review_false_negatives'])
 
         if review_total_predictions > 0:
-            stats['review_accuracy'] = ((stats['review_true_positives'] + stats['review_true_negatives']) / 
+            stats['review_accuracy'] = ((stats['review_true_positives'] + stats['review_true_negatives']) /
                                        review_total_predictions) * 100
-            stats['review_sensitivity'] = (stats['review_true_positives'] / 
+            stats['review_sensitivity'] = (stats['review_true_positives'] /
                                          (stats['review_true_positives'] + stats['review_false_negatives'])) * 100 if (stats['review_true_positives'] + stats['review_false_negatives']) > 0 else 0.0
         else:
             stats['review_accuracy'] = 0.0
             stats['review_sensitivity'] = 0.0
-        
+
+        # Calculate Our Type vs Take Type metrics
+        our_total_predictions = (stats['our_true_positives'] + stats['our_true_negatives'] +
+                               stats['our_false_positives'] + stats['our_false_negatives'])
+
+        if our_total_predictions > 0:
+            stats['our_accuracy'] = ((stats['our_true_positives'] + stats['our_true_negatives']) /
+                                    our_total_predictions) * 100
+            stats['our_sensitivity'] = (stats['our_true_positives'] /
+                                      (stats['our_true_positives'] + stats['our_false_negatives'])) * 100 if (stats['our_true_positives'] + stats['our_false_negatives']) > 0 else 0.0
+        else:
+            stats['our_accuracy'] = 0.0
+            stats['our_sensitivity'] = 0.0
+
         # Get available event types for filter dropdown
         cursor = conn.execute('''
             SELECT DISTINCT alarm_type_value
@@ -297,10 +347,10 @@ def index():
             ORDER BY alarm_type_value
         ''')
         available_event_types = [row['alarm_type_value'] for row in cursor.fetchall()]
-        
+
         conn.close()
-        
-        return render_template('dashboard.html', 
+
+        return render_template('dashboard.html',
                              evidence_results=evidence_results,
                              stats=stats,
                              last_fetch_time=last_fetch_time,
@@ -316,7 +366,7 @@ def index():
                                  'start_date': start_date,
                                  'end_date': end_date
                              })
-                             
+
     except Exception as e:
         return f"Error: {str(e)}", 500
 
@@ -325,20 +375,20 @@ def index():
 def export_data():
     try:
         conn = get_db_connection()
-        
+
         # Get filter parameters
         event_types = request.args.getlist('event_type')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        
+
         # Set default event types if none are provided
         if not event_types:
             event_types = ['yawning', 'eye_closed']
-            
+
         # Initialize params list for SQL queries
         params = []
         conditions = []
-        
+
         # Add date range conditions
         if start_date:
             conditions.append("DATE(er.alarm_time) >= DATE(?)")
@@ -346,7 +396,7 @@ def export_data():
         if end_date:
             conditions.append("DATE(er.alarm_time) <= DATE(?)")
             params.append(end_date)
-        
+
         # Add event type conditions
         if event_types and 'all' not in event_types:
             event_conditions = []
@@ -355,16 +405,16 @@ def export_data():
                     event_conditions.append("er.alarm_type_value LIKE '%Yawn%'")
                 elif event_type == 'eye_closed':
                     event_conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
-            
+
             if event_conditions:
                 conditions.append("(" + " OR ".join(event_conditions) + ")")
-        
+
         # Construct the WHERE clause
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
-        
+
         # Get all filtered evidence results
         query = f'''
-            SELECT 
+            SELECT
                 er.device_name,
                 er.alarm_time,
                 er.alarm_type_value as event_type,
@@ -373,14 +423,14 @@ def export_data():
                 er.yawn_count,
                 er.eye_closed_frames,
                 er.processing_status,
-                CASE 
+                CASE
                     WHEN er.takeType = 0 THEN 'True Alarm'
                     WHEN er.takeType = 1 THEN 'False Alarm'
                     ELSE '-'
                 END as take_type,
                 er.takeup_memo as memo,
                 er.takeup_time as memo_time,
-                CASE 
+                CASE
                     WHEN er.review_type = 0 THEN 'True Alarm'
                     WHEN er.review_type = 1 THEN 'False Alarm'
                     ELSE '-'
@@ -390,21 +440,21 @@ def export_data():
             {where_clause}
             ORDER BY er.alarm_time DESC
         '''
-        
+
         cursor = conn.execute(query, params)
         results = cursor.fetchall()
-        
+
         # Create CSV in memory
         si = StringIO()
         writer = csv.writer(si)
-        
+
         # Write headers
         writer.writerow([
             'Device', 'Time', 'Event Type', 'Speed (km/h)', 'Drowsy',
             'Yawn Count', 'Eyes Closed Frames', 'Status', 'Take Type',
             'Memo', 'Memo Time', 'Review Type', 'Video URL'
         ])
-        
+
         # Write data
         for row in results:
             writer.writerow([
@@ -422,11 +472,11 @@ def export_data():
                 row['review_type'],
                 row['video_url'] or '-'
             ])
-        
+
         # Create response
         output = si.getvalue()
         si.close()
-        
+
         return Response(
             output,
             mimetype='text/csv',
@@ -435,7 +485,7 @@ def export_data():
                 'Content-Type': 'text/csv'
             }
         )
-        
+
     except Exception as e:
         return f"Error: {str(e)}", 500
     finally:
