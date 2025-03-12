@@ -288,13 +288,12 @@
                     <div class="btn-group btn-group-sm" role="group">
                         <input type="radio" class="btn-check" name="analysisType" id="takeDrowsy" value="takeDrowsy" checked>
                         <label class="btn btn-outline-light" for="takeDrowsy">Drowsy vs Take Type</label>
-                        
-                        <input type="radio" class="btn-check" name="analysisType" id="ourTake" value="ourTake">
-                        <label class="btn btn-outline-light" for="ourTake">Our Type vs Take Type</label>
-                        
+
                         <input type="radio" class="btn-check" name="analysisType" id="takeReview" value="takeReview">
                         <label class="btn btn-outline-light" for="takeReview">Review Type vs Take Type</label>
 
+                        <input type="radio" class="btn-check" name="analysisType" id="ourTake" value="ourTake">
+                        <label class="btn btn-outline-light" for="ourTake">Our Type vs Take Type</label>
                     </div>
                     <span class="badge bg-info ms-2">Metrics</span>
                 </div>
@@ -381,43 +380,43 @@
                                     <thead>
                                         <tr>
                                             <th></th>
-                                            <th class="text-center">Detection Values Match Expectation</th>
-                                            <th class="text-center">Detection Values Don't Match Expectation</th>
+                                            <th class="text-center">Predicted Class</th>
+                                            <th class="text-center">Not Predicted Class</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <tr>
-                                            <th>Actually Drowsy</th>
+                                            <th>True Class</th>
                                             <td class="text-center bg-success-light">
                                                 <strong>{{ stats.our_true_positives }}</strong>
                                                 <div class="small">True Positives <i class="bx bx-info-circle text-info"
                                                     data-bs-toggle="tooltip"
                                                     data-bs-html="true"
-                                                    title="(Normal state frames highest & takeType=False) OR<br>(Yawn alarm & yawn_count highest & takeType=True) OR<br>(Eye closed alarm & eye_closed highest & takeType=True)"></i></div>
+                                                    title="For Yawning alarms: yawn_count is highest AND takeType=0<br>OR<br>For Eye closed alarms: eye_closed_frames is highest AND takeType=0<br>OR<br>For normal state: normal_state_frames is highest AND takeType=1"></i></div>
                                             </td>
                                             <td class="text-center bg-danger-light">
                                                 <strong>{{ stats.our_false_negatives }}</strong>
                                                 <div class="small">False Negatives <i class="bx bx-info-circle text-info"
                                                     data-bs-toggle="tooltip"
                                                     data-bs-html="true"
-                                                    title="(Detection values don't match alarm type OR<br>normal state not highest when it should be)"></i></div>
+                                                    title="Detection values don't match alarm type OR<br>normal state not highest when it should be"></i></div>
                                             </td>
                                         </tr>
                                         <tr>
-                                            <th>Actually Not Drowsy</th>
+                                            <th>Not True Class</th>
                                             <td class="text-center bg-danger-light">
                                                 <strong>{{ stats.our_false_positives }}</strong>
                                                 <div class="small">False Positives <i class="bx bx-info-circle text-info"
                                                     data-bs-toggle="tooltip"
                                                     data-bs-html="true"
-                                                    title="(Normal state highest but takeType=True) OR<br>(Detection values match alarm type but takeType=False)"></i></div>
+                                                    title="Normal state highest but takeType=0<br>OR<br>Detection values match alarm type but takeType=1"></i></div>
                                             </td>
                                             <td class="text-center bg-success-light">
                                                 <strong>{{ stats.our_true_negatives }}</strong>
                                                 <div class="small">True Negatives <i class="bx bx-info-circle text-info"
                                                     data-bs-toggle="tooltip"
                                                     data-bs-html="true"
-                                                    title="(Detection values don't match alarm type AND takeType=False) OR<br>(No significant detection values AND takeType=False)"></i></div>
+                                                    title="Detection values don't match alarm type AND takeType=1<br>OR<br>No significant detection values AND takeType=1"></i></div>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -483,6 +482,7 @@
                                             N/A
                                         {% endif %}
                                     </h2>
+                                    <div class="small">How often alarm type matches detection values</div>
                                 </div>
                             </div>
                             <div class="stats-card card bg-success text-white p-3">
@@ -495,6 +495,7 @@
                                             N/A
                                         {% endif %}
                                     </h2>
+                                    <div class="small">True positive rate for alarm type matching detection</div>
                                 </div>
                             </div>
                         </div>

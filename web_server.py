@@ -175,7 +175,7 @@ def index():
             event_conditions = []
             for event_type in event_types:
                 if event_type == 'yawning':
-                    event_conditions.append("er.alarm_type_value LIKE '%Yawn%'")
+                    event_conditions.append("er.alarm_type_value LIKE '%Yawning%'")
                 elif event_type == 'eye_closed':
                     event_conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
 
@@ -246,51 +246,83 @@ def index():
                 COALESCE(SUM(CASE WHEN processing_status = 'processed' THEN 1 ELSE 0 END), 0) as processed_events,
                 (SELECT count FROM pending_count) as pending_events,
                 COALESCE(SUM(CASE WHEN processing_status = 'failed' THEN 1 ELSE 0 END), 0) as failed_events,
-                -- Take Type metrics
-                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as take_true_positives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as take_false_positives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as take_true_negatives,
-                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as take_false_negatives,
-                -- Review Type vs Take Type metrics
-                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 0 THEN 1 ELSE 0 END), 0) as review_true_positives,
-                COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 0 THEN 1 ELSE 0 END), 0) as review_false_positives,
-                COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 1 THEN 1 ELSE 0 END), 0) as review_true_negatives,
-                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 1 THEN 1 ELSE 0 END), 0) as review_false_negatives,
+                -- Take Type metrics (only processed records)
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 0 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as take_true_positives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as take_false_positives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as take_true_negatives,
+                COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 0 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as take_false_negatives,
+                -- Review Type vs Take Type metrics (only processed records)
+                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 0 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_true_positives,
+                COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 0 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_false_positives,
+                COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_true_negatives,
+                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_false_negatives,
                 -- Our Type vs Take Type metrics (based on alarm_type_value and detection values)
+                -- Only include records where takeType is not NULL and processing_status = 'processed'
                 COALESCE(SUM(CASE
-                    -- Normal state is highest and takeType = 1 (False Alarm) - this is a true positive for normal state
-                    WHEN normal_state_frames > yawn_count AND normal_state_frames > eye_closed_frames AND takeType = 1 THEN 1
-                    -- Yawn alarm and yawn_count is highest
-                    WHEN alarm_type_value LIKE '%Yawn%' AND yawn_count > eye_closed_frames AND yawn_count >= normal_state_frames AND takeType = 0 THEN 1
-                    -- Eye closed alarm and eye_closed_frames is highest
-                    WHEN alarm_type_value LIKE '%Eye closed%' AND eye_closed_frames >= yawn_count AND eye_closed_frames >= normal_state_frames AND takeType = 0 THEN 1
+                    -- For Yawning alarms, check if yawn_count is highest
+                    WHEN alarm_type_value LIKE '%Yawning%'
+                        AND takeType = 0
+                        AND processing_status = 'processed'
+                        AND yawn_count > eye_closed_frames
+                        AND (normal_state_frames IS NULL OR yawn_count >= normal_state_frames) THEN 1
+                    -- For Eye closed alarms, check if eye_closed_frames is highest
+                    WHEN alarm_type_value LIKE '%Eye closed%'
+                        AND takeType = 0
+                        AND processing_status = 'processed'
+                        AND eye_closed_frames > yawn_count
+                        AND (normal_state_frames IS NULL OR eye_closed_frames >= normal_state_frames) THEN 1
+                    -- For normal state, check if normal_state_frames is highest
+                    WHEN normal_state_frames IS NOT NULL
+                        AND normal_state_frames > yawn_count
+                        AND normal_state_frames > eye_closed_frames
+                        AND takeType = 1
+                        AND processing_status = 'processed' THEN 1
                     ELSE 0
                 END), 0) as our_true_positives,
                 COALESCE(SUM(CASE
-                    -- Normal state is highest but takeType = 0 (True Alarm) - this is a false positive for normal state
-                    WHEN normal_state_frames > yawn_count AND normal_state_frames > eye_closed_frames AND takeType = 0 THEN 1
-                    -- Yawn alarm and yawn_count is highest but takeType = 1 (False Alarm)
-                    WHEN alarm_type_value LIKE '%Yawn%' AND yawn_count > eye_closed_frames AND yawn_count >= normal_state_frames AND takeType = 1 THEN 1
-                    -- Eye closed alarm and eye_closed_frames is highest but takeType = 1 (False Alarm)
-                    WHEN alarm_type_value LIKE '%Eye closed%' AND eye_closed_frames >= yawn_count AND eye_closed_frames >= normal_state_frames AND takeType = 1 THEN 1
+                    -- For Yawning alarms, check if yawn_count is NOT highest or takeType is wrong
+                    WHEN alarm_type_value LIKE '%Yawning%'
+                        AND processing_status = 'processed'
+                        AND (
+                            takeType = 1 OR
+                            yawn_count <= eye_closed_frames OR
+                            (normal_state_frames IS NOT NULL AND yawn_count < normal_state_frames)
+                        ) THEN 1
+                    -- For Eye closed alarms, check if eye_closed_frames is NOT highest or takeType is wrong
+                    WHEN alarm_type_value LIKE '%Eye closed%'
+                        AND processing_status = 'processed'
+                        AND (
+                            takeType = 1 OR
+                            eye_closed_frames <= yawn_count OR
+                            (normal_state_frames IS NOT NULL AND eye_closed_frames < normal_state_frames)
+                        ) THEN 1
+                    -- For normal state, check if normal_state_frames is NOT highest or takeType is wrong
+                    WHEN normal_state_frames IS NOT NULL
+                        AND processing_status = 'processed'
+                        AND (
+                            (normal_state_frames <= yawn_count OR normal_state_frames <= eye_closed_frames) OR
+                            takeType = 0
+                        ) THEN 1
                     ELSE 0
                 END), 0) as our_false_positives,
                 COALESCE(SUM(CASE
-                    -- Yawn alarm but yawn_count is not highest and takeType = 1 (False Alarm)
-                    WHEN alarm_type_value LIKE '%Yawn%' AND (yawn_count <= eye_closed_frames OR yawn_count < normal_state_frames) AND takeType = 1 THEN 1
-                    -- Eye closed alarm but eye_closed_frames is not highest and takeType = 1 (False Alarm)
-                    WHEN alarm_type_value LIKE '%Eye closed%' AND (eye_closed_frames < yawn_count OR eye_closed_frames < normal_state_frames) AND takeType = 1 THEN 1
-                    -- No detection at all and takeType = 1 (False Alarm)
-                    WHEN (yawn_count = 0 OR yawn_count IS NULL) AND (eye_closed_frames = 0 OR eye_closed_frames IS NULL) AND (normal_state_frames = 0 OR normal_state_frames IS NULL) AND takeType = 1 THEN 1
+                    -- True negatives: Correctly identified as not matching the alarm type
+                    WHEN processing_status = 'processed'
+                        AND takeType = 1
+                        AND (
+                            (alarm_type_value LIKE '%Yawning%' AND (yawn_count <= eye_closed_frames OR (normal_state_frames IS NOT NULL AND yawn_count < normal_state_frames))) OR
+                            (alarm_type_value LIKE '%Eye closed%' AND (eye_closed_frames <= yawn_count OR (normal_state_frames IS NOT NULL AND eye_closed_frames < normal_state_frames)))
+                        ) THEN 1
                     ELSE 0
                 END), 0) as our_true_negatives,
                 COALESCE(SUM(CASE
-                    -- Yawn alarm but yawn_count is not highest and takeType = 0 (True Alarm)
-                    WHEN alarm_type_value LIKE '%Yawn%' AND (yawn_count <= eye_closed_frames OR yawn_count < normal_state_frames) AND takeType = 0 THEN 1
-                    -- Eye closed alarm but eye_closed_frames is not highest and takeType = 0 (True Alarm)
-                    WHEN alarm_type_value LIKE '%Eye closed%' AND (eye_closed_frames < yawn_count OR eye_closed_frames < normal_state_frames) AND takeType = 0 THEN 1
-                    -- No detection at all and takeType = 0 (True Alarm)
-                    WHEN (yawn_count = 0 OR yawn_count IS NULL) AND (eye_closed_frames = 0 OR eye_closed_frames IS NULL) AND (normal_state_frames = 0 OR normal_state_frames IS NULL) AND takeType = 0 THEN 1
+                    -- False negatives: Incorrectly identified as not matching the alarm type
+                    WHEN processing_status = 'processed'
+                        AND takeType = 0
+                        AND (
+                            (alarm_type_value LIKE '%Yawning%' AND (yawn_count <= eye_closed_frames OR (normal_state_frames IS NOT NULL AND yawn_count < normal_state_frames))) OR
+                            (alarm_type_value LIKE '%Eye closed%' AND (eye_closed_frames <= yawn_count OR (normal_state_frames IS NOT NULL AND eye_closed_frames < normal_state_frames)))
+                        ) THEN 1
                     ELSE 0
                 END), 0) as our_false_negatives
             FROM evidence_results er
@@ -402,7 +434,7 @@ def export_data():
             event_conditions = []
             for event_type in event_types:
                 if event_type == 'yawning':
-                    event_conditions.append("er.alarm_type_value LIKE '%Yawn%'")
+                    event_conditions.append("er.alarm_type_value LIKE '%Yawning%'")
                 elif event_type == 'eye_closed':
                     event_conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
 
