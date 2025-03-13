@@ -578,7 +578,6 @@
                                 <th class="focus-column">Drowsy</th>
                                 <th class="focus-column">Detection</th>
                                 <th>Process Time</th>
-                                <th>Model Name</th>
                                 <th>Status</th>
                                 <th>Take Type</th>
                                 <th>Memo</th>
@@ -643,14 +642,10 @@
                                 </td>
                                 <td>
                                     {% if event.process_time is not none %}
-                                        {{ "%.2f"|format(event.process_time|float) }} sec
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if event.model_name %}
-                                        {{ event.model_name }}
+                                        <span data-bs-toggle="tooltip" data-bs-placement="top" title="Model: {{ event.model_name if event.model_name else 'Unknown' }}">
+                                            {{ "%.2f"|format(event.process_time|float) }} sec
+                                            {% if event.model_name %}<i class="bx bx-info-circle text-info"></i>{% endif %}
+                                        </span>
                                     {% else %}
                                         -
                                     {% endif %}
@@ -768,8 +763,7 @@
                                 <p><strong>Yawns:</strong> <span id="videoYawns"></span></p>
                                 <p><strong>Eyes Closed Frames:</strong> <span id="videoEyesClosed"></span></p>
                                 <p><strong>Normal State Frames:</strong> <span id="videoNormalState"></span></p>
-                                <p><strong>Process Time:</strong> <span id="videoProcessTime"></span></p>
-                                <p><strong>Model Name:</strong> <span id="videoModelName"></span></p>
+                                <p><strong>Process Time:</strong> <span id="videoProcessTime"></span> <small class="text-muted">(Model: <span id="videoModelName"></span>)</small></p>
                                 <p><strong>Take Type:</strong> <span id="videoTakeType"></span></p>
                             </div>
                         </div>
@@ -789,6 +783,12 @@
     <script>
         // Initialize multiselect dropdowns
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize tooltips
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            })
+
             // Event Type Select
             const eventTypeSelect = document.getElementById('eventTypeSelect');
             if (eventTypeSelect) {
