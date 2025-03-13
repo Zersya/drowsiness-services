@@ -525,25 +525,30 @@
                                 </div>
                             </div>
 
-                            <!-- Existing Event Type Filters -->
+                            <!-- Event Type Filter (Multiselect) -->
                             <div class="event-type-filters me-3">
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="checkbox" id="allEvents" name="event_type" value="all"
-                                           {% if not filters.event_types or ('all' in filters.event_types and not 'yawning' in filters.event_types and not 'eye_closed' in filters.event_types) %}checked{% endif %}
-                                           onchange="handleAllEventsChange(this)">
-                                    <label class="form-check-label text-white" for="allEvents">All Events</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-dark text-white border-secondary">Event Type</span>
+                                    <select class="form-select form-select-sm bg-dark text-white border-secondary"
+                                            id="eventTypeSelect" name="event_type" multiple>
+                                        <option value="all" {% if not filters.event_types or 'all' in filters.event_types %}selected{% endif %}>All Events</option>
+                                        <option value="yawning" {% if 'yawning' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Yawning</option>
+                                        <option value="eye_closed" {% if 'eye_closed' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Eye Closed</option>
+                                    </select>
                                 </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input event-type-checkbox" type="checkbox" id="yawningEvents" name="event_type" value="yawning"
-                                           {% if not filters.event_types or 'yawning' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
-                                           onchange="handleEventTypeChange()">
-                                    <label class="form-check-label text-white" for="yawningEvents">Yawning</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input event-type-checkbox" type="checkbox" id="eyeClosedEvents" name="event_type" value="eye_closed"
-                                           {% if not filters.event_types or 'eye_closed' in filters.event_types or not 'all' in filters.event_types %}checked{% endif %}
-                                           onchange="handleEventTypeChange()">
-                                    <label class="form-check-label text-white" for="eyeClosedEvents">Eye Closed</label>
+                            </div>
+
+                            <!-- Status Filter (Multiselect) -->
+                            <div class="status-filters me-3">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-dark text-white border-secondary">Status</span>
+                                    <select class="form-select form-select-sm bg-dark text-white border-secondary"
+                                            id="statusSelect" name="status" multiple>
+                                        <option value="all" {% if not filters.status_types or 'all' in filters.status_types %}selected{% endif %}>All Status</option>
+                                        <option value="processed" {% if 'processed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Processed</option>
+                                        <option value="pending" {% if 'pending' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Pending</option>
+                                        <option value="failed" {% if 'failed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Failed</option>
+                                    </select>
                                 </div>
                             </div>
 
@@ -572,10 +577,10 @@
                                 <th>Speed</th>
                                 <th class="focus-column">Drowsy</th>
                                 <th class="focus-column">Detection</th>
+                                <th>Process Time</th>
                                 <th>Status</th>
                                 <th>Take Type</th>
                                 <th>Memo</th>
-                                <th>Memo Time</th>
                                 <th>Review Type</th>
                                 <th>Actions</th>
                             </tr>
@@ -636,6 +641,13 @@
                                     {% endif %}
                                 </td>
                                 <td>
+                                    {% if event.process_time is not none %}
+                                        {{ "%.2f"|format(event.process_time|float) }} sec
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
                                     <span class="badge {% if event.processing_status == 'processed' %}bg-success{% elif event.processing_status == 'failed' %}bg-danger{% else %}bg-warning{% endif %}">
                                         {{ event.processing_status }}
                                     </span>
@@ -650,7 +662,6 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ event.takeup_memo if event.takeup_memo else '-' }}</td>
-                                <td>{{ event.takeup_time if event.takeup_time else '-' }}</td>
                                 <td>
                                     {% if event.review_type is not none %}
                                         <span class="badge {% if event.review_type == 0 %}bg-danger{% else %}bg-success{% endif %}">
@@ -663,7 +674,7 @@
                                 <td>
                                     {% if event.video_url %}
                                         <button type="button" class="btn btn-sm btn-primary action-btn"
-                                                onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }})">
+                                                onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }}, {{ event.process_time if event.process_time is not none else 'null' }})">
                                             <i class="bx bx-play"></i> Play Video
                                         </button>
                                     {% else %}
@@ -682,29 +693,29 @@
                 <nav aria-label="Page navigation">
                     <ul class="pagination justify-content-center">
                         <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
-                            <a class="page-link" href="?page=1{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="First">
+                            <a class="page-link" href="?page=1{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}" aria-label="First">
                                 <span aria-hidden="true">&laquo;&laquo;</span>
                             </a>
                         </li>
                         <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.page - 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="Previous">
+                            <a class="page-link" href="?page={{ pagination.page - 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
 
                         {% for p in range(max(1, pagination.page - 2), min(pagination.total_pages + 1, pagination.page + 3)) %}
                         <li class="page-item {% if p == pagination.page %}active{% endif %}">
-                            <a class="page-link" href="?page={{ p }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}">{{ p }}</a>
+                            <a class="page-link" href="?page={{ p }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}">{{ p }}</a>
                         </li>
                         {% endfor %}
 
                         <li class="page-item {% if pagination.page == pagination.total_pages %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.page + 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="Next">
+                            <a class="page-link" href="?page={{ pagination.page + 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
                         <li class="page-item {% if pagination.page == pagination.total_pages %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.total_pages }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}" aria-label="Last">
+                            <a class="page-link" href="?page={{ pagination.total_pages }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}" aria-label="Last">
                                 <span aria-hidden="true">&raquo;&raquo;</span>
                             </a>
                         </li>
@@ -749,6 +760,7 @@
                                 <p><strong>Yawns:</strong> <span id="videoYawns"></span></p>
                                 <p><strong>Eyes Closed Frames:</strong> <span id="videoEyesClosed"></span></p>
                                 <p><strong>Normal State Frames:</strong> <span id="videoNormalState"></span></p>
+                                <p><strong>Process Time:</strong> <span id="videoProcessTime"></span></p>
                                 <p><strong>Take Type:</strong> <span id="videoTakeType"></span></p>
                             </div>
                         </div>
@@ -766,28 +778,83 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function handleAllEventsChange(checkbox) {
-            // If "All Events" is checked, uncheck other event types
-            if (checkbox.checked) {
-                document.querySelectorAll('.event-type-checkbox').forEach(cb => {
-                    cb.checked = false;
+        // Initialize multiselect dropdowns
+        document.addEventListener('DOMContentLoaded', function() {
+            // Event Type Select
+            const eventTypeSelect = document.getElementById('eventTypeSelect');
+            if (eventTypeSelect) {
+                eventTypeSelect.addEventListener('change', function() {
+                    const selectedOptions = Array.from(this.selectedOptions).map(option => option.value);
+
+                    // If 'All Events' is selected, deselect other options
+                    if (selectedOptions.includes('all')) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value !== 'all') {
+                                option.selected = false;
+                            }
+                        });
+                    }
+
+                    // If any specific event is selected, deselect 'All Events'
+                    const specificEventsSelected = selectedOptions.some(value => value !== 'all');
+                    if (specificEventsSelected) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value === 'all') {
+                                option.selected = false;
+                            }
+                        });
+                    }
+
+                    // If nothing is selected, select 'All Events'
+                    if (this.selectedOptions.length === 0) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value === 'all') {
+                                option.selected = true;
+                            }
+                        });
+                    }
                 });
             }
-        }
 
-        function handleEventTypeChange() {
-            // If any specific event type is checked, uncheck "All Events"
-            const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
-            if (anyEventTypeChecked) {
-                document.getElementById('allEvents').checked = false;
-            } else {
-                // If no specific event type is checked, check "All Events"
-                document.getElementById('allEvents').checked = true;
+            // Status Select
+            const statusSelect = document.getElementById('statusSelect');
+            if (statusSelect) {
+                statusSelect.addEventListener('change', function() {
+                    const selectedOptions = Array.from(this.selectedOptions).map(option => option.value);
+
+                    // If 'All Status' is selected, deselect other options
+                    if (selectedOptions.includes('all')) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value !== 'all') {
+                                option.selected = false;
+                            }
+                        });
+                    }
+
+                    // If any specific status is selected, deselect 'All Status'
+                    const specificStatusSelected = selectedOptions.some(value => value !== 'all');
+                    if (specificStatusSelected) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value === 'all') {
+                                option.selected = false;
+                            }
+                        });
+                    }
+
+                    // If nothing is selected, select 'All Status'
+                    if (this.selectedOptions.length === 0) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value === 'all') {
+                                option.selected = true;
+                            }
+                        });
+                    }
+                });
             }
-        }
+        });
 
         // Video modal functions
-        function openVideoModal(videoUrl, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType, normalStateFrames) {
+        function openVideoModal(videoUrl, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType, normalStateFrames, processTime) {
             // Set video source
             const videoPlayer = document.getElementById('videoPlayer');
             videoPlayer.src = videoUrl;
@@ -804,6 +871,7 @@
             document.getElementById('videoYawns').textContent = yawns;
             document.getElementById('videoEyesClosed').textContent = eyesClosed;
             document.getElementById('videoNormalState').textContent = normalStateFrames || 0;
+            document.getElementById('videoProcessTime').textContent = processTime !== null ? processTime.toFixed(2) + ' sec' : '-';
             document.getElementById('videoTakeType').textContent = takeType === 0 ? "True Alarm" :
                                                                   takeType === 1 ? "False Alarm" : "-";
 
@@ -825,29 +893,24 @@
             });
         }
 
-        // Initial check on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            // Set default behavior - check both specific event types if nothing is selected
-            const anyEventTypeChecked = Array.from(document.querySelectorAll('.event-type-checkbox')).some(cb => cb.checked);
-            const allEventsChecked = document.getElementById('allEvents').checked;
 
-            if (!anyEventTypeChecked && !allEventsChecked) {
-                document.querySelectorAll('.event-type-checkbox').forEach(cb => {
-                    cb.checked = true;
-                });
-                document.getElementById('allEvents').checked = false;
-            }
-
-            handleEventTypeChange();
-        });
 
         function resetFilters() {
             document.getElementById('startDate').value = '';
             document.getElementById('endDate').value = '';
-            document.getElementById('allEvents').checked = true;
-            document.querySelectorAll('.event-type-checkbox').forEach(cb => {
-                cb.checked = false;
+
+            // Reset event type select
+            const eventTypeSelect = document.getElementById('eventTypeSelect');
+            Array.from(eventTypeSelect.options).forEach(option => {
+                option.selected = option.value === 'all';
             });
+
+            // Reset status select
+            const statusSelect = document.getElementById('statusSelect');
+            Array.from(statusSelect.options).forEach(option => {
+                option.selected = option.value === 'all';
+            });
+
             document.getElementById('filterForm').submit();
         }
 
@@ -918,8 +981,10 @@
             // Get current filter values
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
-            const eventTypes = Array.from(document.querySelectorAll('input[name="event_type"]:checked'))
-                .map(cb => cb.value);
+            const eventTypes = Array.from(document.getElementById('eventTypeSelect').selectedOptions)
+                .map(option => option.value);
+            const statusTypes = Array.from(document.getElementById('statusSelect').selectedOptions)
+                .map(option => option.value);
 
             // Construct export URL with current filters
             let exportUrl = '/export?';
@@ -927,6 +992,9 @@
             if (endDate) exportUrl += `end_date=${endDate}&`;
             eventTypes.forEach(type => {
                 exportUrl += `event_type=${type}&`;
+            });
+            statusTypes.forEach(status => {
+                exportUrl += `status=${status}&`;
             });
 
             // Trigger download
@@ -940,17 +1008,21 @@
             align-items: center;
         }
 
-        .filter-controls .form-check-input {
+        .filter-controls .form-select {
+            min-width: 150px;
+            font-size: 0.9rem;
+        }
+
+        .filter-controls .form-select option {
             background-color: #343a40;
-            border-color: #6c757d;
+            color: white;
         }
 
-        .filter-controls .form-check-input:checked {
+        .filter-controls .form-select option:checked {
             background-color: #0d6efd;
-            border-color: #0d6efd;
         }
 
-        .filter-controls .form-check-label {
+        .filter-controls .input-group-text {
             font-size: 0.9rem;
         }
 

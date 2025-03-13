@@ -142,6 +142,13 @@ def index():
         if not event_types:
             event_types = ['yawning', 'eye_closed']
 
+        # Get status filter parameters
+        status_types = request.args.getlist('status')
+
+        # Set default status types if none are provided
+        if not status_types:
+            status_types = ['all']
+
         # Get latest fetch time
         cursor = conn.execute('''
             SELECT last_fetch_time
@@ -182,6 +189,15 @@ def index():
             if event_conditions:
                 conditions.append("(" + " OR ".join(event_conditions) + ")")
 
+        # Add status conditions
+        if status_types and 'all' not in status_types:
+            status_conditions = []
+            for status in status_types:
+                status_conditions.append(f"er.processing_status = '{status}'")
+
+            if status_conditions:
+                conditions.append("(" + " OR ".join(status_conditions) + ")")
+
         # Construct the WHERE clause
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -216,7 +232,8 @@ def index():
                 er.takeup_memo,
                 er.takeup_time,
                 er.takeType,
-                er.review_type
+                er.review_type,
+                er.process_time
             FROM evidence_results er
             {where_clause}
             ORDER BY er.alarm_time DESC
@@ -395,6 +412,7 @@ def index():
                              filters={
                                  'event_types': event_types,
                                  'available_event_types': available_event_types,
+                                 'status_types': status_types,
                                  'start_date': start_date,
                                  'end_date': end_date
                              })
@@ -412,10 +430,15 @@ def export_data():
         event_types = request.args.getlist('event_type')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
+        status_types = request.args.getlist('status')
 
         # Set default event types if none are provided
         if not event_types:
             event_types = ['yawning', 'eye_closed']
+
+        # Set default status types if none are provided
+        if not status_types:
+            status_types = ['all']
 
         # Initialize params list for SQL queries
         params = []
@@ -441,6 +464,15 @@ def export_data():
             if event_conditions:
                 conditions.append("(" + " OR ".join(event_conditions) + ")")
 
+        # Add status conditions
+        if status_types and 'all' not in status_types:
+            status_conditions = []
+            for status in status_types:
+                status_conditions.append(f"er.processing_status = '{status}'")
+
+            if status_conditions:
+                conditions.append("(" + " OR ".join(status_conditions) + ")")
+
         # Construct the WHERE clause
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -454,6 +486,7 @@ def export_data():
                 er.is_drowsy,
                 er.yawn_count,
                 er.eye_closed_frames,
+                er.process_time,
                 er.processing_status,
                 CASE
                     WHEN er.takeType = 0 THEN 'True Alarm'
@@ -483,7 +516,7 @@ def export_data():
         # Write headers
         writer.writerow([
             'Device', 'Time', 'Event Type', 'Speed (km/h)', 'Drowsy',
-            'Yawn Count', 'Eyes Closed Frames', 'Status', 'Take Type',
+            'Yawn Count', 'Eyes Closed Frames', 'Process Time (sec)', 'Status', 'Take Type',
             'Memo', 'Memo Time', 'Review Type', 'Video URL'
         ])
 
@@ -497,6 +530,7 @@ def export_data():
                 'Yes' if row['is_drowsy'] else 'No',
                 row['yawn_count'] or 0,
                 row['eye_closed_frames'] or 0,
+                f"{row['process_time']:.2f}" if row['process_time'] is not None else '-',
                 row['processing_status'],
                 row['take_type'],
                 row['memo'] or '-',
