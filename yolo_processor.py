@@ -16,6 +16,8 @@ class YoloProcessor:
         # Load environment variables
         load_dotenv()
         self.use_cuda = os.getenv('USE_CUDA', 'true').lower() == 'true'
+        # Extract model name from the path
+        self.model_name = os.path.basename(model_path)
         self.model = self.load_model()
         # Add parameters for eye detection tuning
         self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '3'))  # Minimum frames for a blink
@@ -237,6 +239,7 @@ class YoloProcessor:
                 'max_consecutive_eye_closed': max_consecutive_eye_closed,  # New metric
                 'early_detection': False,
                 'process_time': process_time,  # Add processing time in seconds
+                'model_name': self.model_name,  # Add model name
                 'metrics': {
                     'consecutive_eye_closed': consecutive_eye_closed,
                     'consecutive_normal_state': consecutive_normal_state,

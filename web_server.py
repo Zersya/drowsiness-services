@@ -233,7 +233,8 @@ def index():
                 er.takeup_time,
                 er.takeType,
                 er.review_type,
-                er.process_time
+                er.process_time,
+                er.model_name
             FROM evidence_results er
             {where_clause}
             ORDER BY er.alarm_time DESC
@@ -487,6 +488,7 @@ def export_data():
                 er.yawn_count,
                 er.eye_closed_frames,
                 er.process_time,
+                er.model_name,
                 er.processing_status,
                 CASE
                     WHEN er.takeType = 0 THEN 'True Alarm'
@@ -516,7 +518,7 @@ def export_data():
         # Write headers
         writer.writerow([
             'Device', 'Time', 'Event Type', 'Speed (km/h)', 'Drowsy',
-            'Yawn Count', 'Eyes Closed Frames', 'Process Time (sec)', 'Status', 'Take Type',
+            'Yawn Count', 'Eyes Closed Frames', 'Process Time (sec)', 'Model Name', 'Status', 'Take Type',
             'Memo', 'Memo Time', 'Review Type', 'Video URL'
         ])
 
@@ -531,6 +533,7 @@ def export_data():
                 row['yawn_count'] or 0,
                 row['eye_closed_frames'] or 0,
                 f"{row['process_time']:.2f}" if row['process_time'] is not None else '-',
+                row['model_name'] or '-',
                 row['processing_status'],
                 row['take_type'],
                 row['memo'] or '-',

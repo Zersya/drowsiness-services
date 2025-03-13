@@ -578,6 +578,7 @@
                                 <th class="focus-column">Drowsy</th>
                                 <th class="focus-column">Detection</th>
                                 <th>Process Time</th>
+                                <th>Model Name</th>
                                 <th>Status</th>
                                 <th>Take Type</th>
                                 <th>Memo</th>
@@ -648,6 +649,13 @@
                                     {% endif %}
                                 </td>
                                 <td>
+                                    {% if event.model_name %}
+                                        {{ event.model_name }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
                                     <span class="badge {% if event.processing_status == 'processed' %}bg-success{% elif event.processing_status == 'failed' %}bg-danger{% else %}bg-warning{% endif %}">
                                         {{ event.processing_status }}
                                     </span>
@@ -674,7 +682,7 @@
                                 <td>
                                     {% if event.video_url %}
                                         <button type="button" class="btn btn-sm btn-primary action-btn"
-                                                onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }}, {{ event.process_time if event.process_time is not none else 'null' }})">
+                                                onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }}, {{ event.process_time if event.process_time is not none else 'null' }}, '{{ event.model_name if event.model_name else "" }}')">
                                             <i class="bx bx-play"></i> Play Video
                                         </button>
                                     {% else %}
@@ -761,6 +769,7 @@
                                 <p><strong>Eyes Closed Frames:</strong> <span id="videoEyesClosed"></span></p>
                                 <p><strong>Normal State Frames:</strong> <span id="videoNormalState"></span></p>
                                 <p><strong>Process Time:</strong> <span id="videoProcessTime"></span></p>
+                                <p><strong>Model Name:</strong> <span id="videoModelName"></span></p>
                                 <p><strong>Take Type:</strong> <span id="videoTakeType"></span></p>
                             </div>
                         </div>
@@ -854,7 +863,7 @@
         });
 
         // Video modal functions
-        function openVideoModal(videoUrl, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType, normalStateFrames, processTime) {
+        function openVideoModal(videoUrl, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType, normalStateFrames, processTime, modelName) {
             // Set video source
             const videoPlayer = document.getElementById('videoPlayer');
             videoPlayer.src = videoUrl;
@@ -872,6 +881,7 @@
             document.getElementById('videoEyesClosed').textContent = eyesClosed;
             document.getElementById('videoNormalState').textContent = normalStateFrames || 0;
             document.getElementById('videoProcessTime').textContent = processTime !== null ? processTime.toFixed(2) + ' sec' : '-';
+            document.getElementById('videoModelName').textContent = modelName || '-';
             document.getElementById('videoTakeType').textContent = takeType === 0 ? "True Alarm" :
                                                                   takeType === 1 ? "False Alarm" : "-";
 

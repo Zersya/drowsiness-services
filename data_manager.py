@@ -47,7 +47,8 @@ class DataManager:
                         takeup_time TIMESTAMP,
                         takeType INTEGER,
                         review_type INTEGER,
-                        process_time REAL
+                        process_time REAL,
+                        model_name TEXT
                     )
                 ''')
 
@@ -141,15 +142,15 @@ class DataManager:
                 logging.debug(f"Extracted video URL: {video_url}")
                 logging.info(f"Setting processing status to: {processing_status} {evidence_data.get('reviewType')}")
 
-                # Insert main evidence record with normal_state_frames and process_time
+                # Insert main evidence record with normal_state_frames, process_time, and model_name
                 cursor.execute('''
                     INSERT OR REPLACE INTO evidence_results (
                         device_id, device_name, alarm_type, alarm_type_value,
                         alarm_time, location, speed, video_url, image_url,
                         is_drowsy, yawn_count, eye_closed_frames, normal_state_frames,
                         fleet_name, alarm_guid, processing_status,
-                        takeup_memo, takeup_time, takeType, review_type, process_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        takeup_memo, takeup_time, takeType, review_type, process_time, model_name
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     evidence_data.get('deviceID'),
                     evidence_data.get('deviceName'),
@@ -171,7 +172,8 @@ class DataManager:
                     evidence_data.get('takeupTime'),
                     evidence_data.get('takeType'),
                     evidence_data.get('reviewType'),
-                    detection_results.get('process_time') if detection_results else None
+                    detection_results.get('process_time') if detection_results else None,
+                    detection_results.get('model_name') if detection_results else None
                 ))
 
                 evidence_id = cursor.lastrowid
@@ -213,7 +215,8 @@ class DataManager:
                         eye_closed_frames = ?,
                         normal_state_frames = ?,
                         processing_status = ?,
-                        process_time = ?
+                        process_time = ?,
+                        model_name = ?
                     WHERE id = ?
                 ''', (
                     detection_results.get('is_drowsy'),
@@ -222,6 +225,7 @@ class DataManager:
                     detection_results.get('normal_state_frames'),
                     'processed',
                     detection_results.get('process_time'),
+                    detection_results.get('model_name'),
                     evidence_id
                 ))
                 conn.commit()
