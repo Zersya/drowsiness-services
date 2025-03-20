@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import os
 import math
+import logging
 from dotenv import load_dotenv
 from functools import wraps
 from services.auth_service import KeycloakAuth
@@ -18,6 +19,7 @@ CORS(app, supports_credentials=True)
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)  # Set session lifetime to 12 hours
 app.secret_key = os.urandom(24)
 
 # Load environment variables
@@ -50,8 +52,27 @@ def verify_auth():
         if 'token' not in session:
             return False
         try:
-            return auth_service.verify_token(session['token']['access_token'])
-        except:
+            # First, try to verify the current access token
+            if auth_service.verify_token(session['token']['access_token']):
+                return True
+
+            # If token verification fails, try to refresh the token
+            if 'refresh_token' in session['token']:
+                refresh_result = auth_service.refresh_token(session['token']['refresh_token'])
+                if refresh_result['success']:
+                    # Update the session with the new token
+                    session['token'] = refresh_result['token']
+                    # Get updated user info with the new token
+                    try:
+                        session['user_info'] = auth_service.keycloak_openid.userinfo(session['token']['access_token'])
+                    except Exception as e:
+                        logging.warning(f"Failed to update user info after token refresh: {str(e)}")
+                    return True
+
+            # If we get here, both verification and refresh failed
+            return False
+        except Exception as e:
+            logging.error(f"Auth verification error: {str(e)}")
             return False
     else:  # PIN-based auth
         return session.get('authenticated', False)
@@ -97,6 +118,8 @@ def login():
             result = auth_service.authenticate(username, password)
 
             if result['success']:
+                # Set session as permanent to use the configured lifetime
+                session.permanent = True
                 session['token'] = result['token']
                 session['user_info'] = result['user_info']
                 return redirect(url_for('index'))
@@ -106,6 +129,8 @@ def login():
             # PIN-based authentication
             pin = request.form.get('pin')
             if pin == WEB_ACCESS_PIN:
+                # Set session as permanent to use the configured lifetime
+                session.permanent = True
                 session['authenticated'] = True
                 return redirect(url_for('index'))
 

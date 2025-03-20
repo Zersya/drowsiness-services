@@ -2,6 +2,7 @@ from keycloak import KeycloakOpenID
 import os
 from dotenv import load_dotenv
 import logging
+import time
 
 load_dotenv()
 
@@ -44,6 +45,20 @@ class KeycloakAuth:
         except Exception as e:
             logging.error(f"Token verification failed: {str(e)}")
             return False
+
+    def refresh_token(self, refresh_token):
+        try:
+            new_token = self.keycloak_openid.refresh_token(refresh_token)
+            return {
+                'success': True,
+                'token': new_token
+            }
+        except Exception as e:
+            logging.error(f"Token refresh failed: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
 
     def logout(self, refresh_token):
         try:
