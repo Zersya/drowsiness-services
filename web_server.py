@@ -5,6 +5,10 @@ from datetime import datetime, timedelta
 import os
 import math
 import logging
+import subprocess
+import shutil
+import werkzeug
+import time
 from dotenv import load_dotenv
 from functools import wraps
 from services.auth_service import KeycloakAuth
@@ -652,6 +656,271 @@ def internal_error(error):
     if is_ajax_request():  # For AJAX requests
         return jsonify({'error': 'Internal Server Error'}), 500
     return render_template('500.html'), 500
+
+# Model Management Routes
+@app.route('/models')
+@login_required
+def models():
+    """Render the model management page."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.execute('''
+            SELECT id, name, file_path, upload_date, is_active
+            FROM models
+            ORDER BY upload_date DESC
+        ''')
+        models = cursor.fetchall()
+        conn.close()
+
+        return render_template('model_management.html', models=models)
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+@app.route('/upload_model', methods=['POST'])
+@login_required
+def upload_model():
+    """Handle model file upload."""
+    try:
+        # Check if the post request has the file part
+        if 'model_file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file part'}), 400
+
+        file = request.files['model_file']
+
+        # If user does not select file, browser also submits an empty part without filename
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No selected file'}), 400
+
+        # Check file extension
+        if not file.filename.endswith('.pt'):
+            return jsonify({'success': False, 'error': 'Invalid file type. Only .pt files are allowed'}), 400
+
+        # Create models directory if it doesn't exist
+        models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
+        os.makedirs(models_dir, exist_ok=True)
+
+        # Get model name (use provided name or filename)
+        model_name = request.form.get('model_name', '').strip()
+        if not model_name:
+            model_name = os.path.basename(file.filename)
+
+        # Generate a unique filename to avoid overwriting
+        filename = werkzeug.utils.secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{model_name}")
+        if not filename.endswith('.pt'):
+            filename += '.pt'
+
+        # Save the file
+        file_path = os.path.join(models_dir, filename)
+        file.save(file_path)
+
+        # Store model info in database
+        conn = get_db_connection()
+        cursor = conn.execute('''
+            INSERT INTO models (name, file_path, upload_date, is_active)
+            VALUES (?, ?, ?, 0)
+        ''', (model_name, os.path.join('models', filename), datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Model uploaded successfully'})
+    except Exception as e:
+        logging.error(f"Error uploading model: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/set_active_model', methods=['POST'])
+@login_required
+def set_active_model():
+    """Set a model as active."""
+    try:
+        data = request.json
+        model_id = data.get('model_id')
+
+        if not model_id:
+            return jsonify({'success': False, 'error': 'Model ID is required'}), 400
+
+        conn = get_db_connection()
+
+        # First, get the model path
+        cursor = conn.execute('SELECT file_path FROM models WHERE id = ?', (model_id,))
+        model = cursor.fetchone()
+
+        if not model:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Model not found'}), 404
+
+        # Reset all models to inactive
+        conn.execute('UPDATE models SET is_active = 0')
+
+        # Set the selected model as active
+        conn.execute('UPDATE models SET is_active = 1 WHERE id = ?', (model_id,))
+
+        # Update the YOLO_MODEL_PATH in the .env file
+        model_path = model['file_path']
+        update_env_file('YOLO_MODEL_PATH', model_path)
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Model set as active successfully'})
+    except Exception as e:
+        logging.error(f"Error setting active model: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/delete_model', methods=['POST'])
+@login_required
+def delete_model():
+    """Delete a model from the database and file system."""
+    try:
+        data = request.json
+        model_id = data.get('model_id')
+
+        if not model_id:
+            return jsonify({'success': False, 'error': 'Model ID is required'}), 400
+
+        conn = get_db_connection()
+
+        # First, check if the model exists and is not active
+        cursor = conn.execute('SELECT file_path, is_active FROM models WHERE id = ?', (model_id,))
+        model = cursor.fetchone()
+
+        if not model:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Model not found'}), 404
+
+        if model['is_active'] == 1:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Cannot delete the active model. Please set another model as active first.'}), 400
+
+        # Get the file path to delete the file
+        file_path = model['file_path']
+        full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), file_path)
+
+        # Delete the model from the database
+        conn.execute('DELETE FROM models WHERE id = ?', (model_id,))
+        conn.commit()
+        conn.close()
+
+        # Delete the file if it exists
+        if os.path.exists(full_path):
+            os.remove(full_path)
+            logging.info(f"Deleted model file: {full_path}")
+
+        return jsonify({'success': True, 'message': 'Model deleted successfully'})
+    except Exception as e:
+        logging.error(f"Error deleting model: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/restart_detector', methods=['POST'])
+@login_required
+def restart_detector():
+    """Restart the drowsiness detector process."""
+    try:
+        # Get the active model path
+        conn = get_db_connection()
+        cursor = conn.execute('SELECT file_path FROM models WHERE is_active = 1')
+        active_model = cursor.fetchone()
+        conn.close()
+
+        if not active_model:
+            return jsonify({'success': False, 'error': 'No active model found'}), 400
+
+        # Try to find and kill the existing drowsiness_detector process
+        try:
+            # First, check if PID file exists
+            pid_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drowsiness_detector.pid')
+            if os.path.exists(pid_file):
+                try:
+                    with open(pid_file, 'r') as f:
+                        pid = int(f.read().strip())
+
+                    logging.info(f"Found PID file with process ID: {pid}")
+
+                    # Try to terminate the process
+                    if os.name == 'nt':  # Windows
+                        subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    else:  # Linux/Mac
+                        subprocess.run(['kill', '-9', str(pid)],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                    # Remove the PID file
+                    os.remove(pid_file)
+                    logging.info(f"Removed PID file after killing process")
+                except Exception as e:
+                    logging.warning(f"Error terminating process from PID file: {e}")
+
+            # Fallback methods if PID file doesn't exist or process termination failed
+            if os.name == 'nt':  # Windows
+                # Find all Python processes running drowsiness_detector.py
+                result = subprocess.run(['wmic', 'process', 'where',
+                                      "commandline like '%drowsiness_detector.py%' and name like '%python%'",
+                                      'get', 'processid'],
+                                     capture_output=True, text=True, check=False)
+
+                # Extract process IDs from the output
+                lines = result.stdout.strip().split('\n')
+                if len(lines) > 1:  # First line is header (ProcessId)
+                    for line in lines[1:]:  # Skip header
+                        if line.strip():  # Skip empty lines
+                            try:
+                                pid = int(line.strip())
+                                logging.info(f"Killing drowsiness_detector.py process with PID: {pid}")
+                                subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            except ValueError:
+                                continue
+
+                # Additional fallback method
+                subprocess.run(['taskkill', '/F', '/FI', "WINDOWTITLE eq *drowsiness_detector*"],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            else:  # Linux/Mac
+                subprocess.run(['pkill', '-f', 'drowsiness_detector.py'],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            # Give processes time to terminate
+            time.sleep(2)
+        except Exception as e:
+            logging.warning(f"Could not kill existing process: {e}")
+
+        # Start the drowsiness_detector.py in a new process
+        if os.name == 'nt':  # Windows
+            subprocess.Popen(['python', 'drowsiness_detector.py'],
+                           creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else:  # Linux/Mac
+            subprocess.Popen(['python3', 'drowsiness_detector.py'],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        return jsonify({'success': True, 'message': 'Drowsiness detector restarted successfully'})
+    except Exception as e:
+        logging.error(f"Error restarting detector: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Helper function to update .env file
+def update_env_file(key, value):
+    """Update a key in the .env file."""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+
+    # Read the current .env file
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as file:
+            lines = file.readlines()
+    else:
+        lines = []
+
+    # Find and replace the key, or add it if not found
+    key_found = False
+    for i, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[i] = f"{key}={value}\n"
+            key_found = True
+            break
+
+    if not key_found:
+        lines.append(f"{key}={value}\n")
+
+    # Write back to the .env file
+    with open(env_path, 'w') as file:
+        file.writelines(lines)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=PORT)

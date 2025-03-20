@@ -135,20 +135,70 @@
             padding: 1rem;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
-        .date-range-filter input[type="date"] {
-            min-width: 130px;
+        /* Filter styles */
+        .form-select[multiple] {
+            height: auto;
+            min-height: 38px;
+            padding-right: 0.75rem;
+            background-image: none;
         }
-        .date-range-filter input[type="date"]::-webkit-calendar-picker-indicator {
-            filter: invert(1);
+
+        .form-select[multiple] option {
+            padding: 8px 12px;
+            margin-bottom: 2px;
+            border-radius: 4px;
         }
+
+        .form-select[multiple] option:checked {
+            background-color: #0d6efd;
+            color: white;
+        }
+
+        .form-select[multiple] option:hover {
+            background-color: #f8f9fa;
+        }
+
+        .input-group .input-group-text {
+            background-color: #f8f9fa;
+            border-right: none;
+        }
+
+        .input-group .form-control,
+        .input-group .form-select {
+            border-left: none;
+        }
+
+        .form-label {
+            color: #495057;
+            margin-bottom: 0.25rem;
+        }
+
+        .btn-group .btn {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-group .btn i {
+            font-size: 1.1rem;
+        }
+
         @media (max-width: 768px) {
-            .filter-controls form {
-                flex-direction: column;
-                align-items: stretch !important;
+            .d-flex.flex-row {
+                flex-direction: column !important;
             }
-            .date-range-filter,
-            .event-type-filters {
-                margin-bottom: 1rem;
+
+            .input-group {
+                margin-bottom: 0.5rem;
+            }
+
+            .btn-group {
+                width: 100%;
+                margin-top: 1rem;
+            }
+
+            .btn-group .btn {
+                flex: 1;
             }
         }
         /* Add these styles to your existing styles */
@@ -171,9 +221,22 @@
     </style>
 </head>
 <body class="bg-light">
-    <nav class="navbar navbar-dark bg-dark">
-        <div class="container">
-            <span class="navbar-brand mb-0 h1">Drowsiness Detection Dashboard</span>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Drowsiness Detection</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/models">Model Management</a>
+                    </li>
+                </ul>
+            </div>
         </div>
     </nav>
 
@@ -504,81 +567,99 @@
             </div>
         </div>
 
+        <!-- Filter Card -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bx bx-filter-alt"></i> Filter Options</h5>
+            </div>
+            <div class="card-body">
+                <form method="get" id="filterForm">
+                    <div class="row g-3">
+                        <!-- Date Range Filter -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Date Range <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter events by date range"></i></label>
+                            <div class="d-flex">
+                                <div class="input-group me-2">
+                                    <span class="input-group-text"><i class="bx bx-calendar"></i></span>
+                                    <input type="date" class="form-control" id="startDate" name="start_date"
+                                           value="{{ filters.start_date if filters.start_date else '' }}" placeholder="From"
+                                           data-bs-toggle="tooltip" title="Start date">
+                                </div>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bx bx-calendar-alt"></i></span>
+                                    <input type="date" class="form-control" id="endDate" name="end_date"
+                                           value="{{ filters.end_date if filters.end_date else '' }}" placeholder="To"
+                                           data-bs-toggle="tooltip" title="End date">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Event Type Filter -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Event Type <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by event type (Yawning or Eye Closed)"></i></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bx bx-list-ul"></i></span>
+                                <select class="form-select" id="eventTypeSelect" name="event_type" multiple data-bs-toggle="tooltip" title="Hold Ctrl/Cmd to select multiple options">
+                                    <option value="all" {% if not filters.event_types or 'all' in filters.event_types %}selected{% endif %}>All Events</option>
+                                    <option value="yawning" {% if 'yawning' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Yawning</option>
+                                    <option value="eye_closed" {% if 'eye_closed' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Eye Closed</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Status Filter -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Status <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by processing status"></i></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bx bx-check-circle"></i></span>
+                                <select class="form-select" id="statusSelect" name="status" multiple data-bs-toggle="tooltip" title="Hold Ctrl/Cmd to select multiple options">
+                                    <option value="all" {% if not filters.status_types or 'all' in filters.status_types %}selected{% endif %}>All Status</option>
+                                    <option value="processed" {% if 'processed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Processed</option>
+                                    <option value="pending" {% if 'pending' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Pending</option>
+                                    <option value="failed" {% if 'failed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Failed</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Model Name Filter -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Model <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by model name"></i></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bx bx-cube-alt"></i></span>
+                                <select class="form-select" id="modelSelect" name="model_name" multiple data-bs-toggle="tooltip" title="Hold Ctrl/Cmd to select multiple options">
+                                    <option value="all" {% if not filters.model_names or 'all' in filters.model_names %}selected{% endif %}>All Models</option>
+                                    {% for model_name in filters.available_model_names %}
+                                    <option value="{{ model_name }}" {% if model_name in filters.model_names and 'all' not in filters.model_names %}selected{% endif %}>{{ model_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="btn-group shadow-sm">
+                                <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Apply selected filters">
+                                    <i class="bx bx-filter"></i> Apply Filters
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="resetFilters()" data-bs-toggle="tooltip" title="Reset all filters to default">
+                                    <i class="bx bx-reset"></i> Reset
+                                </button>
+                                <button type="button" class="btn btn-success" onclick="exportData()" data-bs-toggle="tooltip" title="Export filtered data to CSV">
+                                    <i class="bx bx-download"></i> Export Data
+                                </button>
+                            </div>
+                            <!-- Preserve pagination when filtering -->
+                            <input type="hidden" name="page" value="1">
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Events Table -->
         <div class="card">
             <div class="card-header bg-dark text-white">
-                <div class="d-flex justify-content-between align-items-center flex-wrap">
-                    <h5 class="mb-2 mb-md-0">Recent Events</h5>
-                    <div class="filter-controls">
-                        <form method="get" class="d-flex align-items-center flex-wrap" id="filterForm">
-                            <!-- Date Range Filter -->
-                            <div class="date-range-filter me-3 mb-2 mb-md-0">
-                                <div class="input-group">
-                                    <span class="input-group-text bg-dark text-white border-secondary">From</span>
-                                    <input type="date" class="form-control form-control-sm bg-dark text-white border-secondary"
-                                           id="startDate" name="start_date"
-                                           value="{{ filters.start_date if filters.start_date else '' }}">
-                                    <span class="input-group-text bg-dark text-white border-secondary">To</span>
-                                    <input type="date" class="form-control form-control-sm bg-dark text-white border-secondary"
-                                           id="endDate" name="end_date"
-                                           value="{{ filters.end_date if filters.end_date else '' }}">
-                                </div>
-                            </div>
-
-                            <!-- Event Type Filter (Multiselect) -->
-                            <div class="event-type-filters me-3">
-                                <div class="input-group">
-                                    <span class="input-group-text bg-dark text-white border-secondary">Event Type</span>
-                                    <select class="form-select form-select-sm bg-dark text-white border-secondary"
-                                            id="eventTypeSelect" name="event_type" multiple>
-                                        <option value="all" {% if not filters.event_types or 'all' in filters.event_types %}selected{% endif %}>All Events</option>
-                                        <option value="yawning" {% if 'yawning' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Yawning</option>
-                                        <option value="eye_closed" {% if 'eye_closed' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Eye Closed</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <!-- Status Filter (Multiselect) -->
-                            <div class="status-filters me-3">
-                                <div class="input-group">
-                                    <span class="input-group-text bg-dark text-white border-secondary">Status</span>
-                                    <select class="form-select form-select-sm bg-dark text-white border-secondary"
-                                            id="statusSelect" name="status" multiple>
-                                        <option value="all" {% if not filters.status_types or 'all' in filters.status_types %}selected{% endif %}>All Status</option>
-                                        <option value="processed" {% if 'processed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Processed</option>
-                                        <option value="pending" {% if 'pending' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Pending</option>
-                                        <option value="failed" {% if 'failed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Failed</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <!-- Model Name Filter (Multiselect) -->
-                            <div class="model-filters me-3">
-                                <div class="input-group">
-                                    <span class="input-group-text bg-dark text-white border-secondary">Model</span>
-                                    <select class="form-select form-select-sm bg-dark text-white border-secondary"
-                                            id="modelSelect" name="model_name" multiple>
-                                        <option value="all" {% if not filters.model_names or 'all' in filters.model_names %}selected{% endif %}>All Models</option>
-                                        {% for model_name in filters.available_model_names %}
-                                        <option value="{{ model_name }}" {% if model_name in filters.model_names and 'all' not in filters.model_names %}selected{% endif %}>{{ model_name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <button type="submit" class="btn btn-sm btn-outline-light">Apply Filters</button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="resetFilters()">Reset</button>
-
-                            <!-- Add Export Button -->
-                            <button type="button" class="btn btn-sm btn-outline-success ms-2" onclick="exportData()">
-                                <i class="bx bx-download"></i> Export Data
-                            </button>
-
-                            <!-- Preserve pagination when filtering -->
-                            <input type="hidden" name="page" value="1">
-                        </form>
-                    </div>
-                </div>
+                <h5 class="mb-0">Recent Events</h5>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -977,7 +1058,16 @@
                 option.selected = option.value === 'all';
             });
 
-            document.getElementById('filterForm').submit();
+            // Show a loading spinner
+            const submitBtn = document.querySelector('#filterForm button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Resetting...';
+            submitBtn.disabled = true;
+
+            // Submit the form after a short delay to show the spinner
+            setTimeout(() => {
+                document.getElementById('filterForm').submit();
+            }, 300);
         }
 
         // Set max date to today
@@ -994,6 +1084,43 @@
             // Ensure start date is not after end date
             document.getElementById('endDate').addEventListener('change', function() {
                 document.getElementById('startDate').max = this.value;
+            });
+
+            // Add loading spinner when form is submitted
+            document.getElementById('filterForm').addEventListener('submit', function() {
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Applying...';
+                submitBtn.disabled = true;
+            });
+
+            // Enhance multiselect behavior
+            const multiSelects = document.querySelectorAll('select[multiple]');
+            multiSelects.forEach(select => {
+                // Handle 'All' option selection
+                select.addEventListener('change', function() {
+                    const allOption = Array.from(this.options).find(option => option.value === 'all');
+
+                    if (allOption && allOption.selected) {
+                        // If 'All' is selected, deselect other options
+                        Array.from(this.options).forEach(option => {
+                            if (option.value !== 'all') {
+                                option.selected = false;
+                            }
+                        });
+                    } else {
+                        // If any other option is selected, deselect 'All'
+                        const selectedOptions = Array.from(this.options).filter(option => option.selected);
+                        if (selectedOptions.length > 0 && allOption) {
+                            allOption.selected = false;
+                        }
+
+                        // If no option is selected, select 'All'
+                        if (selectedOptions.length === 0 && allOption) {
+                            allOption.selected = true;
+                        }
+                    }
+                });
             });
 
             // Initialize tooltips
@@ -1087,6 +1214,10 @@
         .filter-controls .form-select option {
             background-color: #343a40;
             color: white;
+        }
+
+        .filter-controls .form-select option:hover {
+            color: #495057;
         }
 
         .filter-controls .form-select option:checked {

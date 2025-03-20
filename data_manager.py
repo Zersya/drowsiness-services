@@ -66,6 +66,17 @@ class DataManager:
                     )
                 ''')
 
+                # Models table for model management
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS models (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        file_path TEXT NOT NULL,
+                        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_active INTEGER DEFAULT 0
+                    )
+                ''')
+
                 conn.commit()
                 logging.info("Database initialized successfully")
         except sqlite3.Error as e:
@@ -428,6 +439,97 @@ class DataManager:
         except sqlite3.Error as e:
             logging.error(f"Error deleting old records: {e}")
             return 0
+
+    def get_models(self):
+        """Get all models from the database."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute('''
+                    SELECT id, name, file_path, upload_date, is_active
+                    FROM models
+                    ORDER BY upload_date DESC
+                ''')
+                return cursor.fetchall()
+        except sqlite3.Error as e:
+            logging.error(f"Error retrieving models: {e}")
+            return []
+
+    def get_active_model(self):
+        """Get the currently active model."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute('''
+                    SELECT id, name, file_path, upload_date
+                    FROM models
+                    WHERE is_active = 1
+                    LIMIT 1
+                ''')
+                return cursor.fetchone()
+        except sqlite3.Error as e:
+            logging.error(f"Error retrieving active model: {e}")
+            return None
+
+    def set_active_model(self, model_id):
+        """Set a model as active and all others as inactive."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # First, reset all models to inactive
+                conn.execute('UPDATE models SET is_active = 0')
+
+                # Then set the selected model as active
+                conn.execute('UPDATE models SET is_active = 1 WHERE id = ?', (model_id,))
+                conn.commit()
+
+                logging.info(f"Set model ID {model_id} as active")
+                return True
+        except sqlite3.Error as e:
+            logging.error(f"Error setting active model: {e}")
+            return False
+
+    def add_model(self, name, file_path):
+        """Add a new model to the database."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute('''
+                    INSERT INTO models (name, file_path, upload_date, is_active)
+                    VALUES (?, ?, ?, 0)
+                ''', (name, file_path, datetime.datetime.now().isoformat()))
+                model_id = cursor.lastrowid
+                conn.commit()
+
+                logging.info(f"Added new model: {name} at {file_path}")
+                return model_id
+        except sqlite3.Error as e:
+            logging.error(f"Error adding model: {e}")
+            return None
+
+    def delete_model(self, model_id):
+        """Delete a model from the database."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # First check if the model is active
+                cursor = conn.execute('SELECT is_active, file_path FROM models WHERE id = ?', (model_id,))
+                model = cursor.fetchone()
+
+                if not model:
+                    logging.warning(f"Attempted to delete non-existent model ID: {model_id}")
+                    return False, "Model not found"
+
+                if model[0] == 1:  # is_active
+                    logging.warning(f"Attempted to delete active model ID: {model_id}")
+                    return False, "Cannot delete active model"
+
+                # Delete the model
+                conn.execute('DELETE FROM models WHERE id = ?', (model_id,))
+                conn.commit()
+
+                logging.info(f"Deleted model ID: {model_id}")
+                return True, model[1]  # Return success and file_path
+        except sqlite3.Error as e:
+            logging.error(f"Error deleting model: {e}")
+            return False, str(e)
 
     def mark_evidence_as_reviewed(self, evidence_id, memo=None, take_type=None):
         """Mark an evidence record as reviewed with an optional memo and take type."""
