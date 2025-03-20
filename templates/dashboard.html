@@ -552,6 +552,20 @@
                                 </div>
                             </div>
 
+                            <!-- Model Name Filter (Multiselect) -->
+                            <div class="model-filters me-3">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-dark text-white border-secondary">Model</span>
+                                    <select class="form-select form-select-sm bg-dark text-white border-secondary"
+                                            id="modelSelect" name="model_name" multiple>
+                                        <option value="all" {% if not filters.model_names or 'all' in filters.model_names %}selected{% endif %}>All Models</option>
+                                        {% for model_name in filters.available_model_names %}
+                                        <option value="{{ model_name }}" {% if model_name in filters.model_names and 'all' not in filters.model_names %}selected{% endif %}>{{ model_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
                             <button type="submit" class="btn btn-sm btn-outline-light">Apply Filters</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="resetFilters()">Reset</button>
 
@@ -696,29 +710,29 @@
                 <nav aria-label="Page navigation">
                     <ul class="pagination justify-content-center">
                         <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
-                            <a class="page-link" href="?page=1{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}" aria-label="First">
+                            <a class="page-link" href="?page=1{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}{% for model in filters.model_names %}&model_name={{ model }}{% endfor %}" aria-label="First">
                                 <span aria-hidden="true">&laquo;&laquo;</span>
                             </a>
                         </li>
                         <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.page - 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}" aria-label="Previous">
+                            <a class="page-link" href="?page={{ pagination.page - 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}{% for model in filters.model_names %}&model_name={{ model }}{% endfor %}" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
 
                         {% for p in range(max(1, pagination.page - 2), min(pagination.total_pages + 1, pagination.page + 3)) %}
                         <li class="page-item {% if p == pagination.page %}active{% endif %}">
-                            <a class="page-link" href="?page={{ p }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}">{{ p }}</a>
+                            <a class="page-link" href="?page={{ p }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}{% for model in filters.model_names %}&model_name={{ model }}{% endfor %}">{{ p }}</a>
                         </li>
                         {% endfor %}
 
                         <li class="page-item {% if pagination.page == pagination.total_pages %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.page + 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}" aria-label="Next">
+                            <a class="page-link" href="?page={{ pagination.page + 1 }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}{% for model in filters.model_names %}&model_name={{ model }}{% endfor %}" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
                         <li class="page-item {% if pagination.page == pagination.total_pages %}disabled{% endif %}">
-                            <a class="page-link" href="?page={{ pagination.total_pages }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}" aria-label="Last">
+                            <a class="page-link" href="?page={{ pagination.total_pages }}{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}{% for model in filters.model_names %}&model_name={{ model }}{% endfor %}" aria-label="Last">
                                 <span aria-hidden="true">&raquo;&raquo;</span>
                             </a>
                         </li>
@@ -860,6 +874,42 @@
                     }
                 });
             }
+
+            // Model Select
+            const modelSelect = document.getElementById('modelSelect');
+            if (modelSelect) {
+                modelSelect.addEventListener('change', function() {
+                    const selectedOptions = Array.from(this.selectedOptions).map(option => option.value);
+
+                    // If 'All Models' is selected, deselect other options
+                    if (selectedOptions.includes('all')) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value !== 'all') {
+                                option.selected = false;
+                            }
+                        });
+                    }
+
+                    // If any specific model is selected, deselect 'All Models'
+                    const specificModelsSelected = selectedOptions.some(value => value !== 'all');
+                    if (specificModelsSelected) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value === 'all') {
+                                option.selected = false;
+                            }
+                        });
+                    }
+
+                    // If nothing is selected, select 'All Models'
+                    if (this.selectedOptions.length === 0) {
+                        Array.from(this.options).forEach(option => {
+                            if (option.value === 'all') {
+                                option.selected = true;
+                            }
+                        });
+                    }
+                });
+            }
         });
 
         // Video modal functions
@@ -918,6 +968,12 @@
             // Reset status select
             const statusSelect = document.getElementById('statusSelect');
             Array.from(statusSelect.options).forEach(option => {
+                option.selected = option.value === 'all';
+            });
+
+            // Reset model select
+            const modelSelect = document.getElementById('modelSelect');
+            Array.from(modelSelect.options).forEach(option => {
                 option.selected = option.value === 'all';
             });
 
@@ -995,6 +1051,8 @@
                 .map(option => option.value);
             const statusTypes = Array.from(document.getElementById('statusSelect').selectedOptions)
                 .map(option => option.value);
+            const modelNames = Array.from(document.getElementById('modelSelect').selectedOptions)
+                .map(option => option.value);
 
             // Construct export URL with current filters
             let exportUrl = '/export?';
@@ -1005,6 +1063,9 @@
             });
             statusTypes.forEach(status => {
                 exportUrl += `status=${status}&`;
+            });
+            modelNames.forEach(model => {
+                exportUrl += `model_name=${model}&`;
             });
 
             // Trigger download

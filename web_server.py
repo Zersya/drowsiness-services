@@ -174,6 +174,13 @@ def index():
         if not status_types:
             status_types = ['all']
 
+        # Get model_name filter parameters
+        model_names = request.args.getlist('model_name')
+
+        # Set default model_names if none are provided
+        if not model_names:
+            model_names = ['all']
+
         # Get latest fetch time
         cursor = conn.execute('''
             SELECT last_fetch_time
@@ -222,6 +229,15 @@ def index():
 
             if status_conditions:
                 conditions.append("(" + " OR ".join(status_conditions) + ")")
+
+        # Add model_name conditions
+        if model_names and 'all' not in model_names:
+            model_conditions = []
+            for model_name in model_names:
+                model_conditions.append(f"er.model_name = '{model_name}'")
+
+            if model_conditions:
+                conditions.append("(" + " OR ".join(model_conditions) + ")")
 
         # Construct the WHERE clause
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
@@ -423,6 +439,15 @@ def index():
         ''')
         available_event_types = [row['alarm_type_value'] for row in cursor.fetchall()]
 
+        # Get available model names for filter dropdown
+        cursor = conn.execute('''
+            SELECT DISTINCT model_name
+            FROM evidence_results
+            WHERE model_name IS NOT NULL AND model_name != ''
+            ORDER BY model_name
+        ''')
+        available_model_names = [row['model_name'] for row in cursor.fetchall()]
+
         conn.close()
 
         return render_template('dashboard.html',
@@ -439,6 +464,8 @@ def index():
                                  'event_types': event_types,
                                  'available_event_types': available_event_types,
                                  'status_types': status_types,
+                                 'model_names': model_names,
+                                 'available_model_names': available_model_names,
                                  'start_date': start_date,
                                  'end_date': end_date
                              })
@@ -457,6 +484,7 @@ def export_data():
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         status_types = request.args.getlist('status')
+        model_names = request.args.getlist('model_name')
 
         # Set default event types if none are provided
         if not event_types:
@@ -465,6 +493,10 @@ def export_data():
         # Set default status types if none are provided
         if not status_types:
             status_types = ['all']
+
+        # Set default model_names if none are provided
+        if not model_names:
+            model_names = ['all']
 
         # Initialize params list for SQL queries
         params = []
@@ -498,6 +530,15 @@ def export_data():
 
             if status_conditions:
                 conditions.append("(" + " OR ".join(status_conditions) + ")")
+
+        # Add model_name conditions
+        if model_names and 'all' not in model_names:
+            model_conditions = []
+            for model_name in model_names:
+                model_conditions.append(f"er.model_name = '{model_name}'")
+
+            if model_conditions:
+                conditions.append("(" + " OR ".join(model_conditions) + ")")
 
         # Construct the WHERE clause
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
