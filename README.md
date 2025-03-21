@@ -50,9 +50,9 @@ USE_CUDA=false
 
 # Detection Parameters
 FETCH_INTERVAL_SECONDS=20
-MIN_BLINK_FRAMES=3
-BLINK_COOLDOWN=15
-EYE_DETECTION_CONFIDENCE=0.6
+MIN_BLINK_FRAMES=1
+BLINK_COOLDOWN=5
+EYE_DETECTION_CONFIDENCE=0.5
 
 # Authentication Configuration
 AUTH_TYPE=PIN  # Options: PIN or KEYCLOAK
@@ -166,7 +166,7 @@ class CustomAnalyzer(DrowsinessAnalyzer):
     def __init__(self, custom_param1, custom_param2):
         self.param1 = custom_param1
         self.param2 = custom_param2
-    
+
     def analyze(self, yawn_count, eye_closed_frames, total_frames):
         # Implement your custom analysis logic here
         return {

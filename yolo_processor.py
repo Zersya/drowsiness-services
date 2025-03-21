@@ -20,9 +20,9 @@ class YoloProcessor:
         self.model_name = os.path.basename(model_path)
         self.model = self.load_model()
         # Add parameters for eye detection tuning
-        self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '3'))  # Minimum frames for a blink
-        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '15'))  # Frames to wait before counting next blink
-        self.confidence_threshold = float(os.getenv('EYE_DETECTION_CONFIDENCE', '0.6'))  # Minimum confidence for eye closed detection
+        self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '1'))  # Minimum frames for a blink (reduced from 3 to 1)
+        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '5'))  # Frames to wait before counting next blink (reduced from 15 to 5)
+        self.confidence_threshold = float(os.getenv('EYE_DETECTION_CONFIDENCE', '0.5'))  # Minimum confidence for eye closed detection (reduced from 0.6 to 0.5)
 
     def load_model(self):
         """Loads and returns a YOLO model for drowsiness detection."""
@@ -195,12 +195,20 @@ class YoloProcessor:
                             max_consecutive_eye_closed = consecutive_eye_closed
                         consecutive_normal_state = 0
 
-                        if max(confident_detections.conf) > 0.8:
-                            logging.info(f"High confidence eye closure detected: {max(confident_detections.conf):.2f}")
-                    else:
+                        # Count eye closed events more aggressively
+                        # If we have at least min_blink_frames consecutive frames with closed eyes
+                        # and we're not in cooldown, count it as an eye closed event
                         if potential_blink_frames >= self.min_blink_frames and blink_cooldown_counter == 0:
                             eye_closed_frames += 1
                             blink_cooldown_counter = self.blink_cooldown
+                            logging.info(f"Eye closure detected with confidence: {max(confident_detections.conf):.2f}")
+                    else:
+                        # Even when eyes are no longer detected as closed, if we had enough frames
+                        # to consider it a valid eye closure, count it
+                        if potential_blink_frames >= self.min_blink_frames and blink_cooldown_counter == 0:
+                            eye_closed_frames += 1
+                            blink_cooldown_counter = self.blink_cooldown
+                            logging.info("Eye closure event counted after detection ended")
                         potential_blink_frames = 0
                         consecutive_eye_closed = 0
 

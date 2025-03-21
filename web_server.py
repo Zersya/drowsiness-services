@@ -87,7 +87,7 @@ def login_required(f):
         if not verify_auth():
             if is_ajax_request():
                 return jsonify({'error': 'Unauthorized'}), 401
-            return redirect(url_for('login'))
+            return redirect(url_for('login', next=request.url))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -100,7 +100,7 @@ def before_request():
     if not verify_auth():
         if is_ajax_request():
             return jsonify({'error': 'Unauthorized'}), 401
-        return redirect(url_for('login'))
+        return redirect(url_for('login', next=request.url))
 
 def get_db_connection():
     """Create a database connection."""
@@ -112,6 +112,10 @@ def get_db_connection():
 def login():
     # Check if already authenticated
     if verify_auth():
+        # If there's a next parameter, redirect to that URL
+        next_url = request.args.get('next')
+        if next_url:
+            return redirect(next_url)
         return redirect(url_for('index'))
 
     if request.method == 'POST':
@@ -126,9 +130,15 @@ def login():
                 session.permanent = True
                 session['token'] = result['token']
                 session['user_info'] = result['user_info']
+
+                # If there's a next parameter in form data or URL, redirect to that URL
+                next_url = request.form.get('next') or request.args.get('next')
+                if next_url:
+                    return redirect(next_url)
                 return redirect(url_for('index'))
 
-            return render_template('login.html', error='Invalid credentials', auth_type=AUTH_TYPE)
+            next_url = request.form.get('next') or request.args.get('next')
+            return render_template('login.html', error='Invalid credentials', auth_type=AUTH_TYPE, next=next_url)
         else:
             # PIN-based authentication
             pin = request.form.get('pin')
@@ -136,11 +146,17 @@ def login():
                 # Set session as permanent to use the configured lifetime
                 session.permanent = True
                 session['authenticated'] = True
+
+                # If there's a next parameter in form data or URL, redirect to that URL
+                next_url = request.form.get('next') or request.args.get('next')
+                if next_url:
+                    return redirect(next_url)
                 return redirect(url_for('index'))
 
-            return render_template('login.html', error='Invalid PIN', auth_type=AUTH_TYPE)
+            next_url = request.form.get('next') or request.args.get('next')
+            return render_template('login.html', error='Invalid PIN', auth_type=AUTH_TYPE, next=next_url)
 
-    return render_template('login.html', auth_type=AUTH_TYPE)
+    return render_template('login.html', auth_type=AUTH_TYPE, next=request.args.get('next'))
 
 @app.route('/logout')
 def logout():
@@ -639,25 +655,57 @@ def export_data():
     finally:
         conn.close()
 
+# Detail view route
+@app.route('/detail/<int:row_id>')
+def detail_view(row_id):
+    """Render the detail view for a specific row."""
+    try:
+        # Check if user is authenticated
+        if not verify_auth():
+            # Store the current URL in the session for redirect after login
+            return redirect(url_for('login', next=request.url))
+
+        conn = get_db_connection()
+
+        # Get the specific row data
+        cursor = conn.execute('''
+            SELECT *
+            FROM evidence_results
+            WHERE id = ?
+        ''', (row_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            conn.close()
+            # Return a custom 404 message for non-existent rows
+            return render_template('404.html', message="The requested event could not be found."), 404
+
+        conn.close()
+
+        return render_template('detail.html', row=row)
+
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
 # Error handlers
 @app.errorhandler(403)
 def forbidden_error(error):
     if is_ajax_request():  # For AJAX requests
         return jsonify({'error': 'Forbidden'}), 403
-    return redirect(url_for('login'))
+    return redirect(url_for('login', next=request.url))
 
 @app.errorhandler(401)
 def unauthorized_error(error):
     if is_ajax_request():  # For AJAX requests
         return jsonify({'error': 'Unauthorized'}), 401
-    return redirect(url_for('login'))
+    return redirect(url_for('login', next=request.url))
 
 @app.errorhandler(404)
 def not_found_error(error):
     if is_ajax_request():  # For AJAX requests
         return jsonify({'error': 'Not Found'}), 404
-    if 'token' not in session:
-        return redirect(url_for('login'))
+    if not verify_auth():
+        return redirect(url_for('login', next=request.url))
     return render_template('404.html'), 404
 
 @app.errorhandler(500)
