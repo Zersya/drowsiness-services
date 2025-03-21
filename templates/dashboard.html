@@ -7,6 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
     <style>
+        add style for every element in table
         .stats-card {
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
@@ -15,23 +16,194 @@
         .stats-card:hover {
             transform: translateY(-5px);
         }
+        /* Table styling to match filter section */
         .table-responsive {
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 0 0 8px 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: #dee2e6 #f8f9fa;
         }
+
+        /* Custom scrollbar styling */
+        .table-responsive::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .table-responsive::-webkit-scrollbar-track {
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .table-responsive::-webkit-scrollbar-thumb {
+            background-color: #dee2e6;
+            border-radius: 4px;
+        }
+
+        .table-responsive::-webkit-scrollbar-thumb:hover {
+            background-color: #ced4da;
+        }
+
+        .events-table {
+            margin-bottom: 0;
+        }
+
+        .events-table thead {
+            background-color: #f8f9fa;
+        }
+
+        .events-table th {
+            font-weight: 600;
+            color: #495057;
+            padding: 1rem 0.75rem;
+            border-bottom: 2px solid #e9ecef;
+            white-space: nowrap;
+        }
+
+        /* Column minimum widths */
+        .events-table th:nth-child(1), .events-table td:nth-child(1) { min-width: 120px; } /* Device */
+        .events-table th:nth-child(2), .events-table td:nth-child(2) { min-width: 150px; } /* Time */
+        .events-table th:nth-child(3), .events-table td:nth-child(3) { min-width: 150px; } /* Event Type */
+        .events-table th:nth-child(4), .events-table td:nth-child(4) { min-width: 100px; } /* Speed */
+        .events-table th:nth-child(5), .events-table td:nth-child(5) { min-width: 90px; } /* Drowsy */
+        .events-table th:nth-child(6), .events-table td:nth-child(6) { min-width: 150px; } /* Detection */
+        .events-table th:nth-child(7), .events-table td:nth-child(7) { min-width: 120px; } /* Process Time */
+        .events-table th:nth-child(8), .events-table td:nth-child(8) { min-width: 100px; } /* Status */
+        .events-table th:nth-child(9), .events-table td:nth-child(9) { min-width: 120px; } /* Take Type */
+        .events-table th:nth-child(10), .events-table td:nth-child(10) { min-width: 150px; } /* Memo */
+        .events-table th:nth-child(11), .events-table td:nth-child(11) { min-width: 120px; } /* Review Type */
+        .events-table th:nth-child(12), .events-table td:nth-child(12) { min-width: 120px; } /* Actions */
+
+        .events-table th i {
+            color: #6c757d;
+            margin-right: 5px;
+        }
+
+        .events-table td {
+            padding: 0.75rem;
+            vertical-align: middle;
+        }
+
+        .events-table tbody tr:hover {
+            background-color: rgba(13, 110, 253, 0.05);
+        }
+
+        /* Status badges styling */
         .status-badge {
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.8em;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            font-weight: 500;
+            display: inline-block;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
+
         .drowsy-true {
             background-color: #dc3545;
             color: white;
         }
+
         .drowsy-false {
             background-color: #198754;
             color: white;
         }
+
+        /* Update all badges to match filter style */
+        .badge {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* Pagination styling */
+        .pagination {
+            gap: 3px;
+        }
+
+        .page-link {
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            color: #0d6efd;
+            padding: 0.4rem 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .page-link:hover {
+            background-color: #e9ecef;
+            border-color: #dee2e6;
+            color: #0a58ca;
+            z-index: 2;
+        }
+
+        .page-item.active .page-link {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 2px 5px rgba(13, 110, 253, 0.3);
+        }
+
+        .page-item.disabled .page-link {
+            color: #6c757d;
+            background-color: #f8f9fa;
+            border-color: #dee2e6;
+        }
+
+        /* Table action button styling */
+        .table-action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .table-action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        }
+
+        .table-action-btn i {
+            font-size: 1rem;
+        }
+
+         /* Filter controls styling */
+         .filter-controls {
+            display: flex;
+            align-items: center;
+        }
+
+        .filter-controls .form-select {
+            min-width: 150px;
+            font-size: 0.9rem;
+        }
+
+        .filter-controls .form-select option {
+            background-color: #343a40;
+            color: white;
+        }
+
+        .filter-controls .form-select option:hover {
+            color: #495057;
+        }
+
+        .filter-controls .form-select option:checked {
+            background-color: #0d6efd;
+        }
+
+        .filter-controls .input-group-text {
+            font-size: 0.9rem;
+        }
+
+        .filter-controls .btn-outline-light {
+            font-size: 0.85rem;
+            padding: 0.25rem 0.5rem;
+        }
+
         .time-info {
             background-color: #f8f9fa;
             border-radius: 10px;
@@ -135,70 +307,264 @@
             padding: 1rem;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
-        /* Filter styles */
-        .form-select[multiple] {
-            height: auto;
-            min-height: 38px;
-            padding-right: 0.75rem;
-            background-image: none;
+        /* Enhanced Filter styles */
+        .filter-card {
+            border: none;
+            border-radius: 8px;
+            overflow: hidden;
         }
 
-        .form-select[multiple] option {
-            padding: 8px 12px;
-            margin-bottom: 2px;
-            border-radius: 4px;
+        .filter-card .card-header {
+            padding: 0.8rem 1.5rem;
+            border-bottom: none;
         }
 
-        .form-select[multiple] option:checked {
-            background-color: #0d6efd;
-            color: white;
+        /* New filter layout styles */
+        .filter-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
-        .form-select[multiple] option:hover {
-            background-color: #f8f9fa;
+        .filter-controls-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-dropdowns {
+            display: flex;
+            flex: 3;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1;
+            min-width: 200px;
+            margin-bottom: 15px;
+        }
+
+        .filter-date-range {
+            flex: 2;
+            min-width: 300px;
+        }
+
+        .filter-actions-row {
+            display: flex;
+            justify-content: flex-end;
+            border-top: 1px solid #f0f0f0;
+            padding-top: 20px;
+            margin-top: 5px;
+        }
+
+        .filter-label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 0.5rem;
+        }
+
+        .date-range-container {
+            display: flex;
+            align-items: center;
+        }
+
+        .date-input {
+            flex: 1;
+        }
+
+        .date-separator {
+            margin: 0 10px;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .input-group {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border-radius: 6px;
+            overflow: hidden;
         }
 
         .input-group .input-group-text {
-            background-color: #f8f9fa;
+            background-color: white;
             border-right: none;
+            color: #6c757d;
+            padding-left: 15px;
         }
 
         .input-group .form-control,
         .input-group .form-select {
             border-left: none;
+            border-color: #e9ecef;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.95rem;
         }
 
-        .form-label {
-            color: #495057;
-            margin-bottom: 0.25rem;
+        .input-group .form-control:focus,
+        .input-group .form-select:focus {
+            box-shadow: none;
+            border-color: #e9ecef;
         }
 
-        .btn-group .btn {
+        .custom-select {
+            height: auto;
+            min-height: 42px;
+            padding-right: 0.75rem;
+            background-image: none;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            width: 100%;
+        }
+
+        .custom-select option {
+            padding: 10px 15px;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .custom-select option:checked {
+            background-color: #0d6efd;
+            color: white;
+        }
+
+        .custom-select option:hover {
+            background-color: #f8f9fa;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            justify-content: flex-end;
+        }
+
+        .action-btn {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            font-weight: 500;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+            transition: all 0.2s;
         }
 
-        .btn-group .btn i {
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .action-btn i {
             font-size: 1.1rem;
         }
 
-        @media (max-width: 768px) {
-            .d-flex.flex-row {
-                flex-direction: column !important;
+        /* Visual indicators for select states */
+        .input-group.all-selected .input-group-text {
+            color: #0d6efd;
+        }
+
+        .input-group.custom-selected .input-group-text {
+            color: #198754;
+        }
+
+        .input-group.all-selected,
+        .input-group.custom-selected {
+            border: 1px solid rgba(13, 110, 253, 0.15);
+            box-shadow: 0 2px 8px rgba(13, 110, 253, 0.1);
+        }
+
+        /* Improve select appearance */
+        select[multiple] {
+            overflow-y: auto;
+            overflow-x: hidden;
+            height: auto !important;
+            min-height: 120px;
+            max-height: 200px;
+        }
+
+        select[multiple] option {
+            padding: 8px 12px;
+            white-space: normal;
+            word-break: break-word;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        select[multiple] option:checked {
+            background-color: #0d6efd !important;
+            color: white;
+        }
+
+        select[multiple] option:hover {
+            background-color: rgba(13, 110, 253, 0.1);
+        }
+
+        /* Responsive styles */
+        @media (max-width: 1200px) {
+            .filter-dropdowns {
+                flex: 2;
             }
 
-            .input-group {
-                margin-bottom: 0.5rem;
-            }
-
-            .btn-group {
-                width: 100%;
-                margin-top: 1rem;
-            }
-
-            .btn-group .btn {
+            .filter-date-range {
                 flex: 1;
+            }
+        }
+
+        @media (max-width: 992px) {
+            .filter-controls-row {
+                flex-direction: column;
+            }
+
+            .filter-dropdowns {
+                width: 100%;
+            }
+
+            .filter-date-range {
+                width: 100%;
+            }
+
+            .date-range-container {
+                flex-direction: row;
+                gap: 10px;
+            }
+
+            .action-buttons {
+                justify-content: flex-end;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .filter-dropdowns {
+                flex-direction: column;
+            }
+
+            .filter-item {
+                width: 100%;
+            }
+
+            .date-range-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .date-separator {
+                display: none;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                width: 100%;
+                gap: 8px;
+            }
+
+            .action-btn {
+                width: 100%;
+                justify-content: center;
             }
         }
         /* Add these styles to your existing styles */
@@ -568,83 +934,92 @@
         </div>
 
         <!-- Filter Card -->
-        <div class="card mb-4">
+        <div class="card mb-4 filter-card shadow-sm">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0"><i class="bx bx-filter-alt"></i> Filter Options</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-4">
                 <form method="get" id="filterForm">
-                    <div class="row g-3">
-                        <!-- Date Range Filter -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Date Range <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter events by date range"></i></label>
-                            <div class="d-flex">
-                                <div class="input-group me-2">
-                                    <span class="input-group-text"><i class="bx bx-calendar"></i></span>
-                                    <input type="date" class="form-control" id="startDate" name="start_date"
-                                           value="{{ filters.start_date if filters.start_date else '' }}" placeholder="From"
-                                           data-bs-toggle="tooltip" title="Start date">
+                    <div class="filter-layout">
+                        <!-- Top Row: Filter Controls -->
+                        <div class="filter-controls-row">
+                            <!-- Left Column: Dropdowns -->
+                            <div class="filter-dropdowns">
+                                <!-- Event Type Filter -->
+                                <div class="filter-item">
+                                    <label class="filter-label">Event Type <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by event type"></i></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bx bx-list-ul"></i></span>
+                                        <select class="form-select" id="eventTypeSelect" name="event_type" multiple>
+                                            <option value="all" {% if not filters.event_types or 'all' in filters.event_types %}selected{% endif %}>All Events</option>
+                                            <option value="yawning" {% if 'yawning' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Yawning</option>
+                                            <option value="eye_closed" {% if 'eye_closed' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Eye Closed</option>
+                                        </select>
+                                    </div>
                                 </div>
-                                <div class="input-group">
-                                    <span class="input-group-text"><i class="bx bx-calendar-alt"></i></span>
-                                    <input type="date" class="form-control" id="endDate" name="end_date"
-                                           value="{{ filters.end_date if filters.end_date else '' }}" placeholder="To"
-                                           data-bs-toggle="tooltip" title="End date">
+
+                                <!-- Status Filter -->
+                                <div class="filter-item">
+                                    <label class="filter-label">Status <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by processing status"></i></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bx bx-check-circle"></i></span>
+                                        <select class="form-select" id="statusSelect" name="status" multiple>
+                                            <option value="all" {% if not filters.status_types or 'all' in filters.status_types %}selected{% endif %}>All Status</option>
+                                            <option value="processed" {% if 'processed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Processed</option>
+                                            <option value="pending" {% if 'pending' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Pending</option>
+                                            <option value="failed" {% if 'failed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Failed</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Model Filter -->
+                                <div class="filter-item">
+                                    <label class="filter-label">Model <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by model name"></i></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bx bx-cube-alt"></i></span>
+                                        <select class="form-select" id="modelSelect" name="model_name" multiple>
+                                            <option value="all" {% if not filters.model_names or 'all' in filters.model_names %}selected{% endif %}>All Models</option>
+                                            {% for model_name in filters.available_model_names %}
+                                            <option value="{{ model_name }}" {% if model_name in filters.model_names and 'all' not in filters.model_names %}selected{% endif %}>{{ model_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right Column: Date Range -->
+                            <div class="filter-date-range">
+                                <label class="filter-label">Date Range <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter events by date range"></i></label>
+                                <div class="date-range-container">
+                                    <div class="date-input">
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bx bx-calendar"></i></span>
+                                            <input type="date" class="form-control" id="startDate" name="start_date"
+                                                value="{{ filters.start_date if filters.start_date else '' }}" placeholder="From">
+                                        </div>
+                                    </div>
+                                    <div class="date-separator">to</div>
+                                    <div class="date-input">
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bx bx-calendar-alt"></i></span>
+                                            <input type="date" class="form-control" id="endDate" name="end_date"
+                                                value="{{ filters.end_date if filters.end_date else '' }}" placeholder="To">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Event Type Filter -->
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Event Type <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by event type (Yawning or Eye Closed)"></i></label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bx bx-list-ul"></i></span>
-                                <select class="form-select" id="eventTypeSelect" name="event_type" multiple data-bs-toggle="tooltip" title="Hold Ctrl/Cmd to select multiple options">
-                                    <option value="all" {% if not filters.event_types or 'all' in filters.event_types %}selected{% endif %}>All Events</option>
-                                    <option value="yawning" {% if 'yawning' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Yawning</option>
-                                    <option value="eye_closed" {% if 'eye_closed' in filters.event_types and 'all' not in filters.event_types %}selected{% endif %}>Eye Closed</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Status Filter -->
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Status <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by processing status"></i></label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bx bx-check-circle"></i></span>
-                                <select class="form-select" id="statusSelect" name="status" multiple data-bs-toggle="tooltip" title="Hold Ctrl/Cmd to select multiple options">
-                                    <option value="all" {% if not filters.status_types or 'all' in filters.status_types %}selected{% endif %}>All Status</option>
-                                    <option value="processed" {% if 'processed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Processed</option>
-                                    <option value="pending" {% if 'pending' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Pending</option>
-                                    <option value="failed" {% if 'failed' in filters.status_types and 'all' not in filters.status_types %}selected{% endif %}>Failed</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Model Name Filter -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Model <i class="bx bx-info-circle text-primary" data-bs-toggle="tooltip" title="Filter by model name"></i></label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bx bx-cube-alt"></i></span>
-                                <select class="form-select" id="modelSelect" name="model_name" multiple data-bs-toggle="tooltip" title="Hold Ctrl/Cmd to select multiple options">
-                                    <option value="all" {% if not filters.model_names or 'all' in filters.model_names %}selected{% endif %}>All Models</option>
-                                    {% for model_name in filters.available_model_names %}
-                                    <option value="{{ model_name }}" {% if model_name in filters.model_names and 'all' not in filters.model_names %}selected{% endif %}>{{ model_name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Action Buttons -->
-                        <div class="col-md-6 d-flex align-items-end">
-                            <div class="btn-group shadow-sm">
-                                <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Apply selected filters">
+                        <!-- Bottom Row: Action Buttons -->
+                        <div class="filter-actions-row">
+                            <div class="action-buttons">
+                                <button type="submit" class="btn btn-primary action-btn">
                                     <i class="bx bx-filter"></i> Apply Filters
                                 </button>
-                                <button type="button" class="btn btn-secondary" onclick="resetFilters()" data-bs-toggle="tooltip" title="Reset all filters to default">
+                                <button type="button" class="btn btn-light action-btn" onclick="resetFilters()">
                                     <i class="bx bx-reset"></i> Reset
                                 </button>
-                                <button type="button" class="btn btn-success" onclick="exportData()" data-bs-toggle="tooltip" title="Export filtered data to CSV">
+                                <button type="button" class="btn btn-success action-btn" onclick="exportData()">
                                     <i class="bx bx-download"></i> Export Data
                                 </button>
                             </div>
@@ -664,20 +1039,20 @@
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-hover">
-                        <thead>
+                        <thead class="table-header">
                             <tr>
-                                <th>Device</th>
-                                <th>Time</th>
-                                <th>Event Type</th>
-                                <th>Speed</th>
-                                <th class="focus-column">Drowsy</th>
-                                <th class="focus-column">Detection</th>
-                                <th>Process Time</th>
-                                <th>Status</th>
-                                <th>Take Type</th>
-                                <th>Memo</th>
-                                <th>Review Type</th>
-                                <th>Actions</th>
+                                <th><i class="bx bx-devices"></i> Device</th>
+                                <th><i class="bx bx-time"></i> Time</th>
+                                <th><i class="bx bx-category"></i> Event Type</th>
+                                <th><i class="bx bx-tachometer"></i> Speed</th>
+                                <th class="focus-column"><i class="bx bx-sleepy"></i> Drowsy</th>
+                                <th class="focus-column"><i class="bx bx-analyse"></i> Detection</th>
+                                <th><i class="bx bx-timer"></i> Process Time</th>
+                                <th><i class="bx bx-check-circle"></i> Status</th>
+                                <th><i class="bx bx-tag"></i> Take Type</th>
+                                <th><i class="bx bx-message-square-detail"></i> Memo</th>
+                                <th><i class="bx bx-revision"></i> Review Type</th>
+                                <th><i class="bx bx-cog"></i> Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -771,7 +1146,7 @@
                                 </td>
                                 <td>
                                     {% if event.video_url %}
-                                        <button type="button" class="btn btn-sm btn-primary action-btn"
+                                        <button type="button" class="btn btn-sm btn-primary table-action-btn shadow-sm"
                                                 onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }}, {{ event.process_time if event.process_time is not none else 'null' }}, '{{ event.model_name if event.model_name else "" }}')">
                                             <i class="bx bx-play"></i> Play Video
                                         </button>
@@ -786,10 +1161,10 @@
                 </div>
             </div>
             {% if pagination.total_records > 0 %}
-            <div class="card-footer">
+            <div class="card-footer bg-white py-3 border-top">
                 <!-- Pagination -->
                 <nav aria-label="Page navigation">
-                    <ul class="pagination justify-content-center">
+                    <ul class="pagination pagination-sm justify-content-center mb-0">
                         <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
                             <a class="page-link" href="?page=1{% for type in filters.event_types %}&event_type={{ type }}{% endfor %}{% for status in filters.status_types %}&status={{ status }}{% endfor %}{% for model in filters.model_names %}&model_name={{ model }}{% endfor %}" aria-label="First">
                                 <span aria-hidden="true">&laquo;&laquo;</span>
@@ -819,12 +1194,12 @@
                         </li>
                     </ul>
                 </nav>
-                <div class="text-center mt-2">
-                    <small class="text-muted">
-                        Showing {{ (pagination.page - 1) * pagination.per_page + 1 }}
+                <div class="text-center mt-3">
+                    <span class="badge bg-light text-dark shadow-sm">
+                        <i class="bx bx-data"></i> Showing {{ (pagination.page - 1) * pagination.per_page + 1 }}
                         to {{ min(pagination.page * pagination.per_page, pagination.total_records) }}
                         of {{ pagination.total_records }} entries
-                    </small>
+                    </span>
                 </div>
             </div>
             {% endif %}
@@ -876,7 +1251,85 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Initialize multiselect dropdowns
+        // Define resetFilters and exportData functions at the top level
+        function resetFilters() {
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+
+            // Reset event type select
+            const eventTypeSelect = document.getElementById('eventTypeSelect');
+            Array.from(eventTypeSelect.options).forEach(option => {
+                option.selected = option.value === 'all';
+            });
+
+            // Reset status select
+            const statusSelect = document.getElementById('statusSelect');
+            Array.from(statusSelect.options).forEach(option => {
+                option.selected = option.value === 'all';
+            });
+
+            // Reset model select
+            const modelSelect = document.getElementById('modelSelect');
+            Array.from(modelSelect.options).forEach(option => {
+                option.selected = option.value === 'all';
+            });
+
+            // Show a loading spinner
+            const submitBtn = document.querySelector('#filterForm button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Resetting...';
+            submitBtn.disabled = true;
+
+            // Submit the form after a short delay to show the spinner
+            setTimeout(() => {
+                document.getElementById('filterForm').submit();
+            }, 300);
+        }
+
+        function exportData() {
+            // Get current filter values
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            // Get selected event types
+            const eventTypeSelect = document.getElementById('eventTypeSelect');
+            const selectedEventTypes = Array.from(eventTypeSelect.selectedOptions).map(option => option.value);
+
+            // Get selected statuses
+            const statusSelect = document.getElementById('statusSelect');
+            const selectedStatuses = Array.from(statusSelect.selectedOptions).map(option => option.value);
+
+            // Get selected models
+            const modelSelect = document.getElementById('modelSelect');
+            const selectedModels = Array.from(modelSelect.selectedOptions).map(option => option.value);
+
+            // Construct export URL with current filters
+            let exportUrl = '/export?';
+            if (startDate) exportUrl += `start_date=${startDate}&`;
+            if (endDate) exportUrl += `end_date=${endDate}&`;
+
+            selectedEventTypes.forEach(type => {
+                exportUrl += `event_type=${type}&`;
+            });
+
+            selectedStatuses.forEach(status => {
+                exportUrl += `status=${status}&`;
+            });
+
+            selectedModels.forEach(model => {
+                exportUrl += `model_name=${model}&`;
+            });
+
+            // Remove trailing '&' if exists
+            if (exportUrl.endsWith('&')) {
+                exportUrl = exportUrl.slice(0, -1);
+            }
+
+            // Trigger download
+            window.location.href = exportUrl;
+        }
+
+        // Initialize dropdowns
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize tooltips
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
@@ -1036,42 +1489,14 @@
 
 
 
-        function resetFilters() {
-            document.getElementById('startDate').value = '';
-            document.getElementById('endDate').value = '';
-
-            // Reset event type select
-            const eventTypeSelect = document.getElementById('eventTypeSelect');
-            Array.from(eventTypeSelect.options).forEach(option => {
-                option.selected = option.value === 'all';
-            });
-
-            // Reset status select
-            const statusSelect = document.getElementById('statusSelect');
-            Array.from(statusSelect.options).forEach(option => {
-                option.selected = option.value === 'all';
-            });
-
-            // Reset model select
-            const modelSelect = document.getElementById('modelSelect');
-            Array.from(modelSelect.options).forEach(option => {
-                option.selected = option.value === 'all';
-            });
-
-            // Show a loading spinner
-            const submitBtn = document.querySelector('#filterForm button[type="submit"]');
-            const originalText = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Resetting...';
-            submitBtn.disabled = true;
-
-            // Submit the form after a short delay to show the spinner
-            setTimeout(() => {
-                document.getElementById('filterForm').submit();
-            }, 300);
-        }
+        // resetFilters function is already defined at the top of the script
 
         // Set max date to today
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize tooltips
+            const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+            const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('startDate').max = today;
             document.getElementById('endDate').max = today;
@@ -1094,40 +1519,43 @@
                 submitBtn.disabled = true;
             });
 
-            // Enhance multiselect behavior
-            const multiSelects = document.querySelectorAll('select[multiple]');
-            multiSelects.forEach(select => {
-                // Handle 'All' option selection
+            // Add visual feedback for select elements
+            const selectElements = document.querySelectorAll('.filter-item select, .filter-date-range select');
+            selectElements.forEach(select => {
+                // Add visual styling
+                styleSelect(select);
+
+                // Add change event listener
                 select.addEventListener('change', function() {
-                    const allOption = Array.from(this.options).find(option => option.value === 'all');
-
-                    if (allOption && allOption.selected) {
-                        // If 'All' is selected, deselect other options
-                        Array.from(this.options).forEach(option => {
-                            if (option.value !== 'all') {
-                                option.selected = false;
-                            }
-                        });
-                    } else {
-                        // If any other option is selected, deselect 'All'
-                        const selectedOptions = Array.from(this.options).filter(option => option.selected);
-                        if (selectedOptions.length > 0 && allOption) {
-                            allOption.selected = false;
-                        }
-
-                        // If no option is selected, select 'All'
-                        if (selectedOptions.length === 0 && allOption) {
-                            allOption.selected = true;
-                        }
-                    }
+                    updateSelectVisual(this);
                 });
             });
 
-            // Initialize tooltips
-            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.map(function (tooltipTriggerEl) {
-                return new bootstrap.Tooltip(tooltipTriggerEl);
-            });
+            // Function to style select elements
+            function styleSelect(select) {
+                // Set initial visual state
+                updateSelectVisual(select);
+            }
+
+            // Function to update visual feedback for select
+            function updateSelectVisual(select) {
+                const selectedOptions = Array.from(select.selectedOptions);
+                const allSelected = selectedOptions.some(opt => opt.value === 'all');
+                const selectContainer = select.closest('.input-group');
+
+                // Add visual indicator based on selection
+                if (allSelected) {
+                    selectContainer.classList.add('all-selected');
+                    selectContainer.classList.remove('custom-selected');
+                } else if (selectedOptions.length > 0) {
+                    selectContainer.classList.add('custom-selected');
+                    selectContainer.classList.remove('all-selected');
+                } else {
+                    selectContainer.classList.remove('all-selected', 'custom-selected');
+                }
+            }
+
+            // Tooltips are already initialized in the main DOMContentLoaded handler
         });
 
         // Add this JavaScript to handle the toggle
@@ -1170,68 +1598,7 @@
             });
         });
 
-        function exportData() {
-            // Get current filter values
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-            const eventTypes = Array.from(document.getElementById('eventTypeSelect').selectedOptions)
-                .map(option => option.value);
-            const statusTypes = Array.from(document.getElementById('statusSelect').selectedOptions)
-                .map(option => option.value);
-            const modelNames = Array.from(document.getElementById('modelSelect').selectedOptions)
-                .map(option => option.value);
-
-            // Construct export URL with current filters
-            let exportUrl = '/export?';
-            if (startDate) exportUrl += `start_date=${startDate}&`;
-            if (endDate) exportUrl += `end_date=${endDate}&`;
-            eventTypes.forEach(type => {
-                exportUrl += `event_type=${type}&`;
-            });
-            statusTypes.forEach(status => {
-                exportUrl += `status=${status}&`;
-            });
-            modelNames.forEach(model => {
-                exportUrl += `model_name=${model}&`;
-            });
-
-            // Trigger download
-            window.location.href = exportUrl;
-        }
+        // exportData function is already defined at the top of the script
     </script>
-    <style>
-        /* Filter controls styling */
-        .filter-controls {
-            display: flex;
-            align-items: center;
-        }
-
-        .filter-controls .form-select {
-            min-width: 150px;
-            font-size: 0.9rem;
-        }
-
-        .filter-controls .form-select option {
-            background-color: #343a40;
-            color: white;
-        }
-
-        .filter-controls .form-select option:hover {
-            color: #495057;
-        }
-
-        .filter-controls .form-select option:checked {
-            background-color: #0d6efd;
-        }
-
-        .filter-controls .input-group-text {
-            font-size: 0.9rem;
-        }
-
-        .filter-controls .btn-outline-light {
-            font-size: 0.85rem;
-            padding: 0.25rem 0.5rem;
-        }
-    </style>
 </body>
 </html>
