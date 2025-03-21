@@ -121,7 +121,8 @@ class ApiClient:
             response = requests.post(self.api_endpoint, headers=headers, data=data)
             response.raise_for_status()
             response_data = response.json()
-            
+            # print(response_data)
+            # exit()
             # Handle session expiration
             if response_data.get('status') == 10023:
                 self.logger.info("Session expired. Attempting to login again...")

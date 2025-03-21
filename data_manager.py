@@ -22,7 +22,7 @@ class DataManager:
                     )
                 ''')
 
-                # Updated evidence_results table with review_type and normal_state_frames
+                # Updated evidence_results table with review_type, normal_state_frames, and takeup_user
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS evidence_results (
                         id INTEGER PRIMARY KEY,
@@ -45,6 +45,7 @@ class DataManager:
                         processing_status TEXT DEFAULT 'pending',
                         takeup_memo TEXT,
                         takeup_time TIMESTAMP,
+                        takeup_user TEXT,
                         takeType INTEGER,
                         review_type INTEGER,
                         process_time REAL,
@@ -153,15 +154,15 @@ class DataManager:
                 logging.debug(f"Extracted video URL: {video_url}")
                 logging.info(f"Setting processing status to: {processing_status} {evidence_data.get('reviewType')}")
 
-                # Insert main evidence record with normal_state_frames, process_time, and model_name
+                # Insert main evidence record with normal_state_frames, process_time, model_name, and takeup_user
                 cursor.execute('''
                     INSERT OR REPLACE INTO evidence_results (
                         device_id, device_name, alarm_type, alarm_type_value,
                         alarm_time, location, speed, video_url, image_url,
                         is_drowsy, yawn_count, eye_closed_frames, normal_state_frames,
                         fleet_name, alarm_guid, processing_status,
-                        takeup_memo, takeup_time, takeType, review_type, process_time, model_name
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        takeup_memo, takeup_time, takeup_user, takeType, review_type, process_time, model_name
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     evidence_data.get('deviceID'),
                     evidence_data.get('deviceName'),
@@ -181,6 +182,7 @@ class DataManager:
                     processing_status,
                     evidence_data.get('takeupMemo'),
                     evidence_data.get('takeupTime'),
+                    evidence_data.get('takeupUser'),
                     evidence_data.get('takeType'),
                     evidence_data.get('reviewType'),
                     detection_results.get('process_time') if detection_results else None,
@@ -531,8 +533,8 @@ class DataManager:
             logging.error(f"Error deleting model: {e}")
             return False, str(e)
 
-    def mark_evidence_as_reviewed(self, evidence_id, memo=None, take_type=None):
-        """Mark an evidence record as reviewed with an optional memo and take type."""
+    def mark_evidence_as_reviewed(self, evidence_id, memo=None, take_type=None, user=None):
+        """Mark an evidence record as reviewed with an optional memo, take type, and user."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -540,12 +542,14 @@ class DataManager:
                 update_query = '''
                     UPDATE evidence_results
                     SET takeup_time = ?,
-                        takeup_memo = ?
+                        takeup_memo = ?,
+                        takeup_user = ?
                 '''
 
                 params = [
                     datetime.datetime.now().isoformat(),
-                    memo
+                    memo,
+                    user
                 ]
 
                 # Add takeType to the update if provided
@@ -559,7 +563,7 @@ class DataManager:
                 cursor.execute(update_query, params)
                 conn.commit()
 
-                logging.info(f"Marked evidence ID {evidence_id} as reviewed")
+                logging.info(f"Marked evidence ID {evidence_id} as reviewed by user {user}")
                 return True
 
         except sqlite3.Error as e:

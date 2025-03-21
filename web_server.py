@@ -292,6 +292,7 @@ def index():
                 er.fleet_name,
                 er.takeup_memo,
                 er.takeup_time,
+                er.takeup_user,
                 er.takeType,
                 er.review_type,
                 er.process_time,
@@ -592,6 +593,7 @@ def export_data():
                 END as take_type,
                 er.takeup_memo as memo,
                 er.takeup_time as memo_time,
+                er.takeup_user as memo_user,
                 CASE
                     WHEN er.review_type = 0 THEN 'True Alarm'
                     WHEN er.review_type = 1 THEN 'False Alarm'
@@ -614,7 +616,7 @@ def export_data():
         writer.writerow([
             'Device', 'Time', 'Event Type', 'Speed (km/h)', 'Drowsy',
             'Yawn Count', 'Eyes Closed Frames', 'Process Time (sec)', 'Model Name', 'Status', 'Take Type',
-            'Memo', 'Memo Time', 'Review Type', 'Video URL'
+            'Memo', 'Memo User', 'Memo Time', 'Review Type', 'Video URL'
         ])
 
         # Write data
@@ -632,6 +634,7 @@ def export_data():
                 row['processing_status'],
                 row['take_type'],
                 row['memo'] or '-',
+                row['memo_user'] or '-',
                 row['memo_time'] or '-',
                 row['review_type'],
                 row['video_url'] or '-'

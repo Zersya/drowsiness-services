@@ -1134,7 +1134,16 @@
                                         -
                                     {% endif %}
                                 </td>
-                                <td>{{ event.takeup_memo if event.takeup_memo else '-' }}</td>
+                                <td>
+                                    {% if event.takeup_memo %}
+                                        <span data-bs-toggle="tooltip" data-bs-html="true" title="User: {{ event.takeup_user if event.takeup_user else 'Unknown' }}">
+                                            {{ event.takeup_memo }}
+                                            {% if event.takeup_user %}<i class="bx bx-user-circle text-info"></i>{% endif %}
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if event.review_type is not none %}
                                         <span class="badge {% if event.review_type == 0 %}bg-danger{% else %}bg-success{% endif %}">

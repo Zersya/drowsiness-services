@@ -154,7 +154,7 @@
                 <a href="/" class="btn btn-outline-secondary btn-back">
                     <i class="bx bx-arrow-back"></i> Back to Dashboard
                 </a>
-                
+
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h1>Event Detail</h1>
                     <div class="share-tooltip">
@@ -349,6 +349,10 @@
                             <div class="detail-value">{{ row.takeup_memo or '-' }}</div>
                         </div>
                         <div class="detail-item">
+                            <div class="detail-label">Memo User</div>
+                            <div class="detail-value">{{ row.takeup_user or '-' }}</div>
+                        </div>
+                        <div class="detail-item">
                             <div class="detail-label">Memo Time</div>
                             <div class="detail-value">{{ row.takeup_time or '-' }}</div>
                         </div>
@@ -373,26 +377,26 @@
         // Function to copy share link to clipboard
         function copyShareLink() {
             const shareUrl = window.location.href;
-            
+
             // Create a temporary input element
             const tempInput = document.createElement('input');
             tempInput.value = shareUrl;
             document.body.appendChild(tempInput);
-            
+
             // Select and copy the link
             tempInput.select();
             document.execCommand('copy');
-            
+
             // Remove the temporary element
             document.body.removeChild(tempInput);
-            
+
             // Show tooltip
             const tooltip = document.getElementById('shareTooltip');
             tooltip.innerHTML = "Copied!";
-            
+
             const shareTooltip = document.querySelector('.share-tooltip');
             shareTooltip.classList.add('show');
-            
+
             // Hide tooltip after 2 seconds
             setTimeout(function() {
                 shareTooltip.classList.remove('show');
