@@ -405,9 +405,12 @@ def index():
                                      take_total_predictions) * 100
             stats['take_sensitivity'] = (stats['take_true_positives'] /
                                        (stats['take_true_positives'] + stats['take_false_negatives'])) * 100 if (stats['take_true_positives'] + stats['take_false_negatives']) > 0 else 0.0
+            stats['take_precision'] = (stats['take_true_positives'] /
+                                     (stats['take_true_positives'] + stats['take_false_positives'])) * 100 if (stats['take_true_positives'] + stats['take_false_positives']) > 0 else 0.0
         else:
             stats['take_accuracy'] = 0.0
             stats['take_sensitivity'] = 0.0
+            stats['take_precision'] = 0.0
 
         # Calculate Review Type metrics
         review_total_predictions = (stats['review_true_positives'] + stats['review_true_negatives'] +
@@ -418,9 +421,12 @@ def index():
                                        review_total_predictions) * 100
             stats['review_sensitivity'] = (stats['review_true_positives'] /
                                          (stats['review_true_positives'] + stats['review_false_negatives'])) * 100 if (stats['review_true_positives'] + stats['review_false_negatives']) > 0 else 0.0
+            stats['review_precision'] = (stats['review_true_positives'] /
+                                       (stats['review_true_positives'] + stats['review_false_positives'])) * 100 if (stats['review_true_positives'] + stats['review_false_positives']) > 0 else 0.0
         else:
             stats['review_accuracy'] = 0.0
             stats['review_sensitivity'] = 0.0
+            stats['review_precision'] = 0.0
 
         # Calculate Our Type vs Take Type metrics
         our_total_predictions = (stats['our_true_positives'] + stats['our_true_negatives'] +
@@ -431,9 +437,12 @@ def index():
                                     our_total_predictions) * 100
             stats['our_sensitivity'] = (stats['our_true_positives'] /
                                       (stats['our_true_positives'] + stats['our_false_negatives'])) * 100 if (stats['our_true_positives'] + stats['our_false_negatives']) > 0 else 0.0
+            stats['our_precision'] = (stats['our_true_positives'] /
+                                    (stats['our_true_positives'] + stats['our_false_positives'])) * 100 if (stats['our_true_positives'] + stats['our_false_positives']) > 0 else 0.0
         else:
             stats['our_accuracy'] = 0.0
             stats['our_sensitivity'] = 0.0
+            stats['our_precision'] = 0.0
 
         # Get available event types for filter dropdown
         cursor = conn.execute('''

@@ -871,10 +871,10 @@
                             </div>
                             <div class="stats-card card bg-success text-white p-3">
                                 <div class="card-body text-center">
-                                    <h6 class="card-subtitle mb-2">Sensitivity (Drowsy vs Take)</h6>
+                                    <h6 class="card-subtitle mb-2">Precision (Drowsy vs Take)</h6>
                                     <h2 class="card-text">
-                                        {% if stats and stats.take_sensitivity is not none %}
-                                            {{ "%.1f"|format(stats.take_sensitivity|float) }}%
+                                        {% if stats and stats.take_precision is not none %}
+                                            {{ "%.1f"|format(stats.take_precision|float) }}%
                                         {% else %}
                                             N/A
                                         {% endif %}
@@ -893,8 +893,8 @@
                             </div>
                             <div class="stats-card card bg-success text-white p-3">
                                 <div class="card-body text-center">
-                                    <h6 class="card-subtitle mb-2">Sensitivity (Review vs Take)</h6>
-                                    <h2 class="card-text">{{ "%.1f"|format(stats.review_sensitivity|float) }}%</h2>
+                                    <h6 class="card-subtitle mb-2">Precision (Review vs Take)</h6>
+                                    <h2 class="card-text">{{ "%.1f"|format(stats.review_precision|float) }}%</h2>
                                 </div>
                             </div>
                         </div>
@@ -916,15 +916,15 @@
                             </div>
                             <div class="stats-card card bg-success text-white p-3">
                                 <div class="card-body text-center">
-                                    <h6 class="card-subtitle mb-2">Sensitivity (Alarm Type vs Detection)</h6>
+                                    <h6 class="card-subtitle mb-2">Precision (Alarm Type vs Detection)</h6>
                                     <h2 class="card-text">
-                                        {% if stats and stats.our_sensitivity is not none %}
-                                            {{ "%.1f"|format(stats.our_sensitivity|float) }}%
+                                        {% if stats and stats.our_precision is not none %}
+                                            {{ "%.1f"|format(stats.our_precision|float) }}%
                                         {% else %}
                                             N/A
                                         {% endif %}
                                     </h2>
-                                    <div class="small">True positive rate for alarm type matching detection</div>
+                                    <div class="small">Positive predictive value for alarm type matching detection</div>
                                 </div>
                             </div>
                         </div>
