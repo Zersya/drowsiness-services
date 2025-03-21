@@ -21,8 +21,8 @@ class YoloProcessor:
         self.model = self.load_model()
         # Add parameters for eye detection tuning
         self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '1'))  # Minimum frames for a blink (reduced from 3 to 1)
-        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '5'))  # Frames to wait before counting next blink (reduced from 15 to 5)
-        self.confidence_threshold = float(os.getenv('EYE_DETECTION_CONFIDENCE', '0.5'))  # Minimum confidence for eye closed detection (reduced from 0.6 to 0.5)
+        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '2'))  # Frames to wait before counting next blink (reduced from 15 to 5)
+        self.confidence_threshold = float(os.getenv('EYE_DETECTION_CONFIDENCE', '0.6'))  # Minimum confidence for eye closed detection (reduced from 0.6 to 0.5)
 
     def load_model(self):
         """Loads and returns a YOLO model for drowsiness detection."""
