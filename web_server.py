@@ -882,13 +882,78 @@ def restart_detector():
         except Exception as e:
             logging.warning(f"Could not kill existing process: {e}")
 
+        # Check if we're in a TMUX environment
+        is_tmux = False
+        try:
+            # Check if TMUX is installed
+            result = subprocess.run(['which', 'tmux'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if result.returncode == 0:
+                # Check if there's a TMUX session named "service1" (from the script)
+                result = subprocess.run(['tmux', 'has-session', '-t', 'service1'],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                is_tmux = result.returncode == 0
+                logging.info(f"TMUX environment detected: {is_tmux}")
+        except Exception as e:
+            logging.warning(f"Error checking for TMUX environment: {e}")
+
         # Start the drowsiness_detector.py in a new process
         if os.name == 'nt':  # Windows
             subprocess.Popen(['python', 'drowsiness_detector.py'],
                            creationflags=subprocess.CREATE_NEW_CONSOLE)
         else:  # Linux/Mac
-            subprocess.Popen(['python3', 'drowsiness_detector.py'],
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if is_tmux:
+                # Restart in TMUX session
+                logging.info("Restarting drowsiness_detector.py in TMUX session 'service1'")
+                work_dir = os.path.dirname(os.path.abspath(__file__))
+
+                # Check if the session exists
+                result = subprocess.run(['tmux', 'has-session', '-t', 'service1'],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                if result.returncode == 0:
+                    # Session exists, send commands to it
+                    subprocess.run(['tmux', 'send-keys', '-t', 'service1', 'C-c', 'C-m'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    time.sleep(1)  # Give time for any cleanup
+
+                    # Send commands to start the service
+                    subprocess.run(['tmux', 'send-keys', '-t', 'service1', f'cd {work_dir}', 'C-m'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                    # Check if virtual environment exists and activate it
+                    venv_path = os.path.join(work_dir, '.venv/bin/activate')
+                    if os.path.exists(venv_path):
+                        subprocess.run(['tmux', 'send-keys', '-t', 'service1', f'source {venv_path}', 'C-m'],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                    # Start the detector
+                    subprocess.run(['tmux', 'send-keys', '-t', 'service1', 'python3 drowsiness_detector.py', 'C-m'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                else:
+                    # Session doesn't exist, create it
+                    logging.info("TMUX session 'service1' not found, creating new session")
+                    subprocess.run(['tmux', 'new-session', '-d', '-s', 'service1'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                    # Send commands to start the service
+                    subprocess.run(['tmux', 'send-keys', '-t', 'service1', f'cd {work_dir}', 'C-m'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                    # Check if virtual environment exists and activate it
+                    venv_path = os.path.join(work_dir, '.venv/bin/activate')
+                    if os.path.exists(venv_path):
+                        subprocess.run(['tmux', 'send-keys', '-t', 'service1', f'source {venv_path}', 'C-m'],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                    # Start the detector
+                    subprocess.run(['tmux', 'send-keys', '-t', 'service1', 'python3 drowsiness_detector.py', 'C-m'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            else:
+                # Regular start without TMUX
+                logging.info("Starting drowsiness_detector.py without TMUX")
+                subprocess.Popen(['python3', 'drowsiness_detector.py'],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         return jsonify({'success': True, 'message': 'Drowsiness detector restarted successfully'})
     except Exception as e:
