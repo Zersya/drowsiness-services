@@ -297,6 +297,21 @@
                             <div class="detail-label">Model Name</div>
                             <div class="detail-value">{{ row.model_name or '-' }}</div>
                         </div>
+                        {% if row.details %}
+                        <div class="detail-item">
+                            <div class="detail-label">Analysis Details</div>
+                            <div class="detail-value">
+                                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#detailsCollapse" aria-expanded="false" aria-controls="detailsCollapse">
+                                    Show Details
+                                </button>
+                                <div class="collapse mt-2" id="detailsCollapse">
+                                    <div class="card card-body">
+                                        <pre class="mb-0">{{ formatted_details or row.details }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
 

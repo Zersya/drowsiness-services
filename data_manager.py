@@ -50,7 +50,8 @@ class DataManager:
                         takeType INTEGER,
                         review_type INTEGER,
                         process_time REAL,
-                        model_name TEXT
+                        model_name TEXT,
+                        details TEXT
                     )
                 ''')
 
@@ -162,15 +163,21 @@ class DataManager:
                 logging.debug(f"Extracted video URL: {video_url}")
                 logging.info(f"Setting processing status to: {processing_status} {evidence_data.get('reviewType')}")
 
-                # Insert main evidence record with normal_state_frames, process_time, model_name, and takeup_user
+                # Convert analysis_details to JSON string if it exists in detection_results
+                details_json = None
+                if detection_results and 'analysis_details' in detection_results:
+                    import json
+                    details_json = json.dumps(detection_results.get('analysis_details'))
+
+                # Insert main evidence record with normal_state_frames, process_time, model_name, takeup_user, and details
                 cursor.execute('''
                     INSERT OR REPLACE INTO evidence_results (
                         device_id, device_name, alarm_type, alarm_type_value,
                         alarm_time, location, speed, video_url, video_url_channel_3, image_url,
                         is_drowsy, yawn_count, eye_closed_frames, normal_state_frames,
                         fleet_name, alarm_guid, processing_status,
-                        takeup_memo, takeup_time, takeup_user, takeType, review_type, process_time, model_name
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        takeup_memo, takeup_time, takeup_user, takeType, review_type, process_time, model_name, details
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     evidence_data.get('deviceID'),
                     evidence_data.get('deviceName'),
@@ -195,7 +202,8 @@ class DataManager:
                     evidence_data.get('takeType'),
                     evidence_data.get('reviewType'),
                     detection_results.get('process_time') if detection_results else None,
-                    detection_results.get('model_name') if detection_results else None
+                    detection_results.get('model_name') if detection_results else None,
+                    details_json
                 ))
 
                 evidence_id = cursor.lastrowid
@@ -230,6 +238,12 @@ class DataManager:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
+                # Convert analysis_details to JSON string if it exists
+                details_json = None
+                if 'analysis_details' in detection_results:
+                    import json
+                    details_json = json.dumps(detection_results.get('analysis_details'))
+
                 cursor.execute('''
                     UPDATE evidence_results
                     SET is_drowsy = ?,
@@ -238,7 +252,8 @@ class DataManager:
                         normal_state_frames = ?,
                         processing_status = ?,
                         process_time = ?,
-                        model_name = ?
+                        model_name = ?,
+                        details = ?
                     WHERE id = ?
                 ''', (
                     detection_results.get('is_drowsy'),
@@ -248,6 +263,7 @@ class DataManager:
                     'processed',
                     detection_results.get('process_time'),
                     detection_results.get('model_name'),
+                    details_json,
                     evidence_id
                 ))
                 conn.commit()

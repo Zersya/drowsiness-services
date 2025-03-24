@@ -78,9 +78,9 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         self.yawn_rate_threshold = yawn_rate_threshold
         self.normal_state_threshold = normal_state_threshold
         self.fps = fps
-        self.max_closure_duration_threshold = max_closure_duration_threshold  # New threshold
-        self.minimum_yawn_threshold = 2
-        self.minimum_eye_closed_threshold = 1  # Reduced from 2 to 1 for more sensitivity
+        self.max_closure_duration_threshold = max_closure_duration_threshold 
+        self.minimum_yawn_threshold = 1
+        self.minimum_eye_closed_threshold = 1 
         self.normal_state_ratio_threshold = 5
         self.minimum_frames_for_analysis = 10
 

@@ -684,9 +684,21 @@ def detail_view(row_id):
             # Return a custom 404 message for non-existent rows
             return render_template('404.html', message="The requested event could not be found."), 404
 
+        # Parse the details JSON if it exists
+        formatted_details = None
+        if row['details']:
+            try:
+                import json
+                details_dict = json.loads(row['details'])
+                # Format the details for better display
+                formatted_details = json.dumps(details_dict, indent=2)
+            except Exception as e:
+                logging.error(f"Error parsing details JSON: {e}")
+                formatted_details = row['details']
+
         conn.close()
 
-        return render_template('detail.html', row=row)
+        return render_template('detail.html', row=row, formatted_details=formatted_details)
 
     except Exception as e:
         return f"Error: {str(e)}", 500
