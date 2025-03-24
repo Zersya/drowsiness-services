@@ -201,6 +201,13 @@ def index():
         if not model_names:
             model_names = ['all']
 
+        # Get takeType filter parameters
+        take_types = request.args.getlist('take_type')
+
+        # Set default take_types if none are provided
+        if not take_types:
+            take_types = ['all']
+
         # Get latest fetch time
         cursor = conn.execute('''
             SELECT last_fetch_time
@@ -258,6 +265,18 @@ def index():
 
             if model_conditions:
                 conditions.append("(" + " OR ".join(model_conditions) + ")")
+
+        # Add takeType conditions
+        if take_types and 'all' not in take_types:
+            take_type_conditions = []
+            for take_type in take_types:
+                if take_type == 'not_empty':
+                    take_type_conditions.append("er.takeType IS NOT NULL")
+                elif take_type in ['0', '1']:
+                    take_type_conditions.append(f"er.takeType = {take_type}")
+
+            if take_type_conditions:
+                conditions.append("(" + " OR ".join(take_type_conditions) + ")")
 
         # Construct the WHERE clause
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
@@ -497,6 +516,7 @@ def index():
                                  'status_types': status_types,
                                  'model_names': model_names,
                                  'available_model_names': available_model_names,
+                                 'take_types': take_types,
                                  'start_date': start_date,
                                  'end_date': end_date
                              })
@@ -516,6 +536,7 @@ def export_data():
         end_date = request.args.get('end_date')
         status_types = request.args.getlist('status')
         model_names = request.args.getlist('model_name')
+        take_types = request.args.getlist('take_type')
 
         # Set default event types if none are provided
         if not event_types:
@@ -528,6 +549,10 @@ def export_data():
         # Set default model_names if none are provided
         if not model_names:
             model_names = ['all']
+
+        # Set default take_types if none are provided
+        if not take_types:
+            take_types = ['all']
 
         # Initialize params list for SQL queries
         params = []
@@ -570,6 +595,18 @@ def export_data():
 
             if model_conditions:
                 conditions.append("(" + " OR ".join(model_conditions) + ")")
+
+        # Add takeType conditions
+        if take_types and 'all' not in take_types:
+            take_type_conditions = []
+            for take_type in take_types:
+                if take_type == 'not_empty':
+                    take_type_conditions.append("er.takeType IS NOT NULL")
+                elif take_type in ['0', '1']:
+                    take_type_conditions.append(f"er.takeType = {take_type}")
+
+            if take_type_conditions:
+                conditions.append("(" + " OR ".join(take_type_conditions) + ")")
 
         # Construct the WHERE clause
         where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
