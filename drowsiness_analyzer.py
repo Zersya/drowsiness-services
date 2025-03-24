@@ -80,7 +80,7 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         self.fps = fps
         self.max_closure_duration_threshold = max_closure_duration_threshold 
         self.minimum_yawn_threshold = 1
-        self.minimum_eye_closed_threshold = 1 
+        self.minimum_eye_closed_threshold = 3 
         self.normal_state_ratio_threshold = 5
         self.minimum_frames_for_analysis = 10
 
@@ -185,7 +185,7 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
 
             # Override drowsiness if confidence is very low due to normal state
             # Reduced threshold from 0.5 to 0.3 to make it less likely to override eye closure detections
-            if is_drowsy and confidence < 0.3:
+            if is_drowsy and confidence < 0.15:
                 is_drowsy = False
                 reason = 'low_confidence_due_to_normal_state'
 
