@@ -34,6 +34,7 @@ class DataManager:
                         location TEXT,
                         speed REAL,
                         video_url TEXT,
+                        video_url_channel_3 TEXT,
                         image_url TEXT,
                         is_drowsy BOOLEAN,
                         yawn_count INTEGER,
@@ -128,15 +129,22 @@ class DataManager:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
 
-                # Extract video URL
+                # Extract video URLs for both channels
                 video_url = None
-                # Look for video URL in the files array
+                video_url_channel_3 = None
+                # Look for video URLs in the files array
                 if evidence_data.get('alarmFile'):
                     for file_data in evidence_data['alarmFile']:
                         # fileType "2" indicates a video file
                         if file_data.get('fileType') == "2":
-                            video_url = file_data.get('downUrl')
-                            break
+                            if file_data.get('channel') == 2:
+                                video_url = file_data.get('downUrl')
+                            elif file_data.get('channel') == 3:
+                                video_url_channel_3 = file_data.get('downUrl')
+
+                            # Break if we found both videos
+                            if video_url and video_url_channel_3:
+                                break
 
                 # If no video found in alarmFile, try the legacy videoUrl field
                 if not video_url:
@@ -158,11 +166,11 @@ class DataManager:
                 cursor.execute('''
                     INSERT OR REPLACE INTO evidence_results (
                         device_id, device_name, alarm_type, alarm_type_value,
-                        alarm_time, location, speed, video_url, image_url,
+                        alarm_time, location, speed, video_url, video_url_channel_3, image_url,
                         is_drowsy, yawn_count, eye_closed_frames, normal_state_frames,
                         fleet_name, alarm_guid, processing_status,
                         takeup_memo, takeup_time, takeup_user, takeType, review_type, process_time, model_name
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     evidence_data.get('deviceID'),
                     evidence_data.get('deviceName'),
@@ -172,6 +180,7 @@ class DataManager:
                     evidence_data.get('location'),
                     evidence_data.get('speed'),
                     video_url,
+                    video_url_channel_3,
                     evidence_data.get('imageUrl'),
                     detection_results.get('is_drowsy') if detection_results else None,
                     detection_results.get('yawn_count') if detection_results else None,

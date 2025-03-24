@@ -175,15 +175,26 @@
                         <h2><i class="bx bx-video"></i> Video Playback</h2>
                     </div>
                     <div class="detail-body">
-                        {% if row.video_url %}
+                        {% if row.video_url or row.video_url_channel_3 %}
+                        <!-- Video Channel Selector -->
+                        <div class="mb-3 text-center">
+                            <div class="btn-group" role="group" aria-label="Video Channel Selector">
+                                <button type="button" class="btn btn-primary {% if row.video_url %}active{% else %}disabled{% endif %}" id="channel2Button" onclick="switchVideoChannel(2)">
+                                    <i class="bx bx-video"></i> Channel 2 Video
+                                </button>
+                                <button type="button" class="btn btn-outline-primary {% if row.video_url_channel_3 %}{% else %}disabled{% endif %}" id="channel3Button" onclick="switchVideoChannel(3)">
+                                    <i class="bx bx-video"></i> Channel 3 Video
+                                </button>
+                            </div>
+                        </div>
                         <div class="video-container mb-3">
                             <video id="videoPlayer" controls>
-                                <source src="{{ row.video_url }}" type="video/mp4">
+                                <source src="{% if row.video_url %}{{ row.video_url|safe }}{% elif row.video_url_channel_3 %}{{ row.video_url_channel_3|safe }}{% endif %}" type="video/mp4">
                                 Your browser does not support the video tag.
                             </video>
                         </div>
                         <div class="text-center">
-                            <a href="{{ row.video_url }}" download class="btn btn-primary">
+                            <a id="downloadButton" href="{% if row.video_url %}{{ row.video_url|safe }}{% elif row.video_url_channel_3 %}{{ row.video_url_channel_3|safe }}{% endif %}" download class="btn btn-primary">
                                 <i class="bx bx-download"></i> Download Video
                             </a>
                         </div>
@@ -364,15 +375,61 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Store video URLs with proper encoding
+        const videoUrlChannel2 = "{{ row.video_url|safe }}";
+        const videoUrlChannel3 = "{{ row.video_url_channel_3|safe }}";
+
         // Auto-play video when page loads
         document.addEventListener('DOMContentLoaded', function() {
             const videoPlayer = document.getElementById('videoPlayer');
             if (videoPlayer) {
+                // Set initial video source with proper encoding
+                videoPlayer.src = decodeURIComponent(videoUrlChannel2 || videoUrlChannel3);
                 videoPlayer.play().catch(e => {
                     console.log('Auto-play prevented by browser:', e);
                 });
             }
         });
+
+        // Function to switch between video channels
+        function switchVideoChannel(channel) {
+            const videoPlayer = document.getElementById('videoPlayer');
+            const downloadButton = document.getElementById('downloadButton');
+            const channel2Button = document.getElementById('channel2Button');
+            const channel3Button = document.getElementById('channel3Button');
+
+            if (channel === 2 && videoUrlChannel2) {
+                videoPlayer.src = decodeURIComponent(videoUrlChannel2);
+                downloadButton.href = decodeURIComponent(videoUrlChannel2);
+
+                // Update button styles
+                channel2Button.classList.remove('btn-outline-primary');
+                channel2Button.classList.add('btn-primary', 'active');
+                channel3Button.classList.remove('btn-primary', 'active');
+                channel3Button.classList.add('btn-outline-primary');
+
+                // Reload and play video
+                videoPlayer.load();
+                videoPlayer.play().catch(e => {
+                    console.log('Auto-play prevented by browser:', e);
+                });
+            } else if (channel === 3 && videoUrlChannel3) {
+                videoPlayer.src = decodeURIComponent(videoUrlChannel3);
+                downloadButton.href = decodeURIComponent(videoUrlChannel3);
+
+                // Update button styles
+                channel3Button.classList.remove('btn-outline-primary');
+                channel3Button.classList.add('btn-primary', 'active');
+                channel2Button.classList.remove('btn-primary', 'active');
+                channel2Button.classList.add('btn-outline-primary');
+
+                // Reload and play video
+                videoPlayer.load();
+                videoPlayer.play().catch(e => {
+                    console.log('Auto-play prevented by browser:', e);
+                });
+            }
+        }
 
         // Function to copy share link to clipboard
         function copyShareLink() {

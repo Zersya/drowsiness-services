@@ -1155,9 +1155,9 @@
                                 </td>
                                 <td>
                                     <div class="d-flex gap-1">
-                                        {% if event.video_url %}
+                                        {% if event.video_url or event.video_url_channel_3 %}
                                             <button type="button" class="btn btn-sm btn-primary table-action-btn shadow-sm"
-                                                    onclick="openVideoModal('{{ event.video_url }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }}, {{ event.process_time if event.process_time is not none else 'null' }}, '{{ event.model_name if event.model_name else "" }}')">
+                                                    onclick="openVideoModal('{{ event.video_url }}', '{{ event.video_url_channel_3 }}', '{{ event.device_name }}', '{{ event.alarm_time }}', '{{ event.alarm_type_value }}', {{ event.yawn_count or 0 }}, {{ event.eye_closed_frames or 0 }}, '{{ 'Yes' if event.is_drowsy else 'No' }}', {{ event.takeType if event.takeType is not none else 'null' }}, {{ event.normal_state_frames or 0 }}, {{ event.process_time if event.process_time is not none else 'null' }}, '{{ event.model_name if event.model_name else "" }}')">
                                                 <i class="bx bx-play"></i> Play Video
                                             </button>
                                         {% else %}
@@ -1237,6 +1237,17 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <!-- Video Channel Selector -->
+                    <div class="mb-3 text-center">
+                        <div class="btn-group" role="group" aria-label="Video Channel Selector">
+                            <button type="button" class="btn btn-primary active" id="channel2Button" onclick="switchVideoChannel(2)">
+                                <i class="bx bx-video"></i> Channel 2 Video
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" id="channel3Button" onclick="switchVideoChannel(3)">
+                                <i class="bx bx-video"></i> Channel 3 Video
+                            </button>
+                        </div>
+                    </div>
                     <div class="video-container">
                         <video id="videoPlayer" controls>
                             <source src="" type="video/mp4">
@@ -1483,15 +1494,34 @@
             }
         });
 
-        // Video modal functions
-        function openVideoModal(videoUrl, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType, normalStateFrames, processTime, modelName) {
-            // Set video source
-            const videoPlayer = document.getElementById('videoPlayer');
-            videoPlayer.src = videoUrl;
+        // Global variables to store video URLs
+        let currentVideoChannel2Url = '';
+        let currentVideoChannel3Url = '';
+        let currentVideoChannel = 2; // Default to channel 2
 
-            // Set download link
-            const downloadButton = document.getElementById('downloadButton');
-            downloadButton.href = videoUrl;
+        // Video modal functions
+        function openVideoModal(videoUrl, videoUrlChannel3, deviceName, time, eventType, yawns, eyesClosed, isDrowsy, takeType, normalStateFrames, processTime, modelName) {
+            // Store both video URLs
+            currentVideoChannel2Url = videoUrl || '';
+            currentVideoChannel3Url = videoUrlChannel3 || '';
+
+            // Reset to channel 2 by default
+            currentVideoChannel = 2;
+
+            // Update UI for channel buttons
+            updateChannelButtonsUI();
+
+            // Set video source based on availability
+            const videoPlayer = document.getElementById('videoPlayer');
+            if (currentVideoChannel2Url) {
+                videoPlayer.src = currentVideoChannel2Url;
+                document.getElementById('downloadButton').href = currentVideoChannel2Url;
+            } else if (currentVideoChannel3Url) {
+                videoPlayer.src = currentVideoChannel3Url;
+                document.getElementById('downloadButton').href = currentVideoChannel3Url;
+                currentVideoChannel = 3;
+                updateChannelButtonsUI();
+            }
 
             // Set video info
             document.getElementById('videoDeviceName').textContent = deviceName;
@@ -1522,6 +1552,54 @@
                 videoPlayer.pause();
                 videoPlayer.currentTime = 0;
             });
+        }
+
+        // Function to switch between video channels
+        function switchVideoChannel(channel) {
+            if (channel === 2 && currentVideoChannel2Url) {
+                currentVideoChannel = 2;
+                const videoPlayer = document.getElementById('videoPlayer');
+                videoPlayer.src = currentVideoChannel2Url;
+                document.getElementById('downloadButton').href = currentVideoChannel2Url;
+                updateChannelButtonsUI();
+                videoPlayer.load();
+                videoPlayer.play().catch(e => {
+                    console.log('Auto-play prevented by browser:', e);
+                });
+            } else if (channel === 3 && currentVideoChannel3Url) {
+                currentVideoChannel = 3;
+                const videoPlayer = document.getElementById('videoPlayer');
+                videoPlayer.src = currentVideoChannel3Url;
+                document.getElementById('downloadButton').href = currentVideoChannel3Url;
+                updateChannelButtonsUI();
+                videoPlayer.load();
+                videoPlayer.play().catch(e => {
+                    console.log('Auto-play prevented by browser:', e);
+                });
+            }
+        }
+
+        // Function to update channel buttons UI
+        function updateChannelButtonsUI() {
+            const channel2Button = document.getElementById('channel2Button');
+            const channel3Button = document.getElementById('channel3Button');
+
+            // Reset both buttons
+            channel2Button.classList.remove('btn-primary', 'btn-outline-primary', 'active');
+            channel3Button.classList.remove('btn-primary', 'btn-outline-primary', 'active');
+
+            // Disable buttons if no video available
+            channel2Button.disabled = !currentVideoChannel2Url;
+            channel3Button.disabled = !currentVideoChannel3Url;
+
+            // Set active button based on current channel
+            if (currentVideoChannel === 2) {
+                channel2Button.classList.add('btn-primary', 'active');
+                channel3Button.classList.add('btn-outline-primary');
+            } else {
+                channel3Button.classList.add('btn-primary', 'active');
+                channel2Button.classList.add('btn-outline-primary');
+            }
         }
 
         // Function to copy share link to clipboard

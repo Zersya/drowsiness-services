@@ -284,6 +284,7 @@ def index():
                 er.location,
                 er.speed,
                 er.video_url,
+                er.video_url_channel_3,
                 er.is_drowsy,
                 er.yawn_count,
                 er.eye_closed_frames,
