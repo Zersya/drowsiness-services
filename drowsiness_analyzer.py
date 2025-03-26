@@ -68,25 +68,25 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
 
     def __init__(self, 
                  # --- Thresholds for triggering drowsiness score calculation ---
-                 perclos_threshold=8.0,          # Percentage of time eyes are closed (e.g., 15%)
+                 perclos_threshold=15.0,          # Percentage of time eyes are closed (e.g., 15%)
                  max_closure_duration_threshold=0.25, # Max duration eyes stayed closed (e.g., 0.4 seconds)
-                 yawn_rate_threshold=3.0,         # Yawns per minute (e.g., 4)
+                 yawn_rate_threshold=1.0,         # Yawns per minute (e.g., 4)
                  
                  # --- Parameters for Score Calculation ---
                  # How much exceeding the threshold contributes to the score? Higher value = steeper increase
                  perclos_scale=2.0, 
                  duration_scale=2.0,
-                 yawn_rate_scale=1.0,
+                 yawn_rate_scale=2.0,
                  
                  # --- Weights for combining scores ---
-                 eye_metric_weight=0.7,          # Weight for combined eye metrics (PERCLOS, Duration)
-                 yawn_metric_weight=0.3,         # Weight for yawn metric
+                 eye_metric_weight=0.6,          # Weight for combined eye metrics (PERCLOS, Duration)
+                 yawn_metric_weight=0.4,         # Weight for yawn metric
                  
                  # --- Normal State Influence ---
-                 normal_state_damping_factor=0.3, # How much normal state reduces the score (0=no effect, 1=strong effect)
+                 normal_state_damping_factor=0.75, # How much normal state reduces the score (0=no effect, 1=strong effect)
 
                  # --- Decision Making ---
-                 drowsiness_decision_threshold=0.35, # Score above which drowsiness is triggered (0.0 to 1.0+)
+                 drowsiness_decision_threshold=0.55, # Score above which drowsiness is triggered (0.0 to 1.0+)
 
                  # --- Minimum requirements ---
                  minimum_frames_for_analysis=30, # Require at least ~1.5 seconds of data at 20 FPS
