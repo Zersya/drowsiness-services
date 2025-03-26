@@ -27,7 +27,7 @@ class DrowsinessAnalyzer(ABC):
 class RateBasedAnalyzer(DrowsinessAnalyzer):
     """Rate-based drowsiness analysis using eye closure percentage and yawn frequency."""
 
-    def __init__(self, eye_closed_percentage_threshold=5, yawn_rate_threshold=3, normal_state_threshold=90, fps=20, max_closure_duration_threshold=0.3):
+    def __init__(self, eye_closed_percentage_threshold=5, yawn_rate_threshold=3, normal_state_threshold=60, fps=20, max_closure_duration_threshold=0.3):
         """
         Initialize with adjusted thresholds for better detection.
 
