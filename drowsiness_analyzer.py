@@ -251,7 +251,8 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         # --- 8. Format Results ---
         result = {
             'is_drowsy': is_drowsy,
-            'confidence_score': final_score, # Renamed from 'confidence' to reflect it's a score, not probability
+            # confidence_score to reflect it's a score, not probability
+            'confidence': final_score, # Renamed from 'confidence' to reflect it's a score, not probability
             'details': {
                 'perclos_%': perclos,
                 'max_closure_duration_s': max_closure_duration,
