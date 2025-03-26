@@ -68,9 +68,9 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
 
     def __init__(self, 
                  # --- Thresholds for triggering drowsiness score calculation ---
-                 perclos_threshold=15.0,          # Percentage of time eyes are closed (e.g., 15%)
-                 max_closure_duration_threshold=0.4, # Max duration eyes stayed closed (e.g., 0.4 seconds)
-                 yawn_rate_threshold=4.0,         # Yawns per minute (e.g., 4)
+                 perclos_threshold=8.0,          # Percentage of time eyes are closed (e.g., 15%)
+                 max_closure_duration_threshold=0.25, # Max duration eyes stayed closed (e.g., 0.4 seconds)
+                 yawn_rate_threshold=3.0,         # Yawns per minute (e.g., 4)
                  
                  # --- Parameters for Score Calculation ---
                  # How much exceeding the threshold contributes to the score? Higher value = steeper increase
@@ -83,10 +83,10 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
                  yawn_metric_weight=0.3,         # Weight for yawn metric
                  
                  # --- Normal State Influence ---
-                 normal_state_damping_factor=0.5, # How much normal state reduces the score (0=no effect, 1=strong effect)
+                 normal_state_damping_factor=0.3, # How much normal state reduces the score (0=no effect, 1=strong effect)
 
                  # --- Decision Making ---
-                 drowsiness_decision_threshold=0.5, # Score above which drowsiness is triggered (0.0 to 1.0+)
+                 drowsiness_decision_threshold=0.35, # Score above which drowsiness is triggered (0.0 to 1.0+)
 
                  # --- Minimum requirements ---
                  minimum_frames_for_analysis=30, # Require at least ~1.5 seconds of data at 20 FPS
