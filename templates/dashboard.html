@@ -1033,9 +1033,16 @@
                                 <button type="button" class="btn btn-light action-btn" onclick="resetFilters()">
                                     <i class="bx bx-reset"></i> Reset
                                 </button>
-                                <button type="button" class="btn btn-success action-btn" onclick="exportData()">
-                                    <i class="bx bx-download"></i> Export Data
-                                </button>
+                                <div class="dropdown d-inline-block">
+                                    <button type="button" class="btn btn-success action-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="bx bx-download"></i> Export Data
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="#" onclick="exportData(); return false;">All Data (Full Format)</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="exportAllPredictions(); return false;">All Predictions (Debug)</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="exportIncorrectPredictions(); return false;">Incorrect Predictions (Debug)</a></li>
+                                    </ul>
+                                </div>
                             </div>
                             <!-- Preserve pagination when filtering -->
                             <input type="hidden" name="page" value="1">
@@ -1394,6 +1401,92 @@
 
             selectedTakeTypes.forEach(takeType => {
                 exportUrl += `take_type=${takeType}&`;
+            });
+
+            // Remove trailing '&' if exists
+            if (exportUrl.endsWith('&')) {
+                exportUrl = exportUrl.slice(0, -1);
+            }
+
+            // Trigger download
+            window.location.href = exportUrl;
+        }
+
+        function exportIncorrectPredictions() {
+            // Get current filter values
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            // Get selected event types
+            const eventTypeSelect = document.getElementById('eventTypeSelect');
+            const selectedEventTypes = Array.from(eventTypeSelect.selectedOptions).map(option => option.value);
+
+            // Get selected statuses
+            const statusSelect = document.getElementById('statusSelect');
+            const selectedStatuses = Array.from(statusSelect.selectedOptions).map(option => option.value);
+
+            // Get selected models
+            const modelSelect = document.getElementById('modelSelect');
+            const selectedModels = Array.from(modelSelect.selectedOptions).map(option => option.value);
+
+            // Construct export URL with current filters
+            let exportUrl = '/export_incorrect_predictions?';
+            if (startDate) exportUrl += `start_date=${startDate}&`;
+            if (endDate) exportUrl += `end_date=${endDate}&`;
+
+            selectedEventTypes.forEach(type => {
+                exportUrl += `event_type=${type}&`;
+            });
+
+            selectedStatuses.forEach(status => {
+                exportUrl += `status=${status}&`;
+            });
+
+            selectedModels.forEach(model => {
+                exportUrl += `model_name=${model}&`;
+            });
+
+            // Remove trailing '&' if exists
+            if (exportUrl.endsWith('&')) {
+                exportUrl = exportUrl.slice(0, -1);
+            }
+
+            // Trigger download
+            window.location.href = exportUrl;
+        }
+
+        function exportAllPredictions() {
+            // Get current filter values
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            // Get selected event types
+            const eventTypeSelect = document.getElementById('eventTypeSelect');
+            const selectedEventTypes = Array.from(eventTypeSelect.selectedOptions).map(option => option.value);
+
+            // Get selected statuses
+            const statusSelect = document.getElementById('statusSelect');
+            const selectedStatuses = Array.from(statusSelect.selectedOptions).map(option => option.value);
+
+            // Get selected models
+            const modelSelect = document.getElementById('modelSelect');
+            const selectedModels = Array.from(modelSelect.selectedOptions).map(option => option.value);
+
+            // Construct export URL with current filters
+            let exportUrl = '/export_all_predictions?';
+            if (startDate) exportUrl += `start_date=${startDate}&`;
+            if (endDate) exportUrl += `end_date=${endDate}&`;
+
+            selectedEventTypes.forEach(type => {
+                exportUrl += `event_type=${type}&`;
+            });
+
+            selectedStatuses.forEach(status => {
+                exportUrl += `status=${status}&`;
+            });
+
+            selectedModels.forEach(model => {
+                exportUrl += `model_name=${model}&`;
             });
 
             // Remove trailing '&' if exists
