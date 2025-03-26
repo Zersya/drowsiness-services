@@ -60,7 +60,7 @@ class ThresholdBasedAnalyzer(DrowsinessAnalyzer):
             }
         }
 
-class RateBasedAnalyzerRevised(DrowsinessAnalyzer):
+class RateBasedAnalyzer(DrowsinessAnalyzer):
     """
     Revised rate-based drowsiness analysis using a scoring system based on 
     eye closure percentage (PERCLOS), maximum eye closure duration, and yawn frequency.
