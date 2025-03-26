@@ -8,6 +8,7 @@ import torch
 from ultralytics import YOLO
 import json
 import hashlib
+import sys
 
 # Import our separated modules
 from data_manager import DataManager
@@ -34,6 +35,7 @@ API_ENDPOINT = os.getenv("API_ENDPOINT")
 API_TOKEN = os.getenv("API_TOKEN")
 # Default model path, will be overridden if active model is found in database
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "models/model-1.pt")
+POSE_MODEL_PATH = os.getenv("POSE_MODEL_PATH", "yolov8l-pose.pt")
 FETCH_INTERVAL_SECONDS = int(os.getenv("FETCH_INTERVAL_SECONDS", "300"))  # Default 5 minutes
 BASE_URL = os.getenv("BASE_URL")
 USERNAME = os.getenv("USERNAME")
@@ -70,9 +72,20 @@ if not all([API_ENDPOINT, API_TOKEN, YOLO_MODEL_PATH]):
     logging.error(f"YOLO_MODEL_PATH: {'Set' if YOLO_MODEL_PATH else 'Missing'}")
     exit(1)
 
+# Check if pose model exists
+if not os.path.exists(POSE_MODEL_PATH):
+    logging.warning(f"Pose model not found at {POSE_MODEL_PATH}. Head pose detection will be disabled.")
+    logging.warning("Please download a YOLOv8 pose model (e.g., yolov8l-pose.pt) to enable head pose detection.")
+
 # Initialize components
 data_manager = DataManager()
 yolo_processor = YoloProcessor(YOLO_MODEL_PATH)
+# Set the pose model path for the YoloProcessor
+yolo_processor.pose_detector.model_path = POSE_MODEL_PATH
+# Reload the pose model if needed
+if not yolo_processor.pose_detector.model:
+    logging.info(f"Loading pose model from {POSE_MODEL_PATH}")
+    yolo_processor.pose_detector.model = yolo_processor.pose_detector.load_model()
 api_client = ApiClient(
     BASE_URL,
     API_ENDPOINT,
@@ -99,6 +112,7 @@ def main():
     logging.info("Starting Drowsiness Detection Service...")
     logging.info(f"API Endpoint: {API_ENDPOINT}")
     logging.info(f"YOLO Model Path: {YOLO_MODEL_PATH}")
+    logging.info(f"YOLO Pose Model Path: {POSE_MODEL_PATH}")
     logging.info(f"Fetch Interval: {FETCH_INTERVAL_SECONDS} seconds")
 
     # Create PID file for process management
@@ -165,20 +179,32 @@ def main():
                                     data_manager.update_evidence_result(evidence_id, detection_results)
 
                                     # Enhanced logging for debugging
+                                    # Get head pose information
+                                    head_pose = detection_results.get('head_pose', {})
+                                    is_head_turned = head_pose.get('is_head_turned', False)
+                                    is_head_down = head_pose.get('is_head_down', False)
+
                                     logging.info(f"Updated evidence result - ID: {evidence_id}, "
                                                  f"Yawns: {detection_results.get('yawn_count', 0)}, "
                                                  f"Eye Closed Events: {detection_results.get('eye_closed_frames', 0)}, "
                                                  f"Total Eye Closed Frames: {detection_results.get('total_eye_closed_frames', 0)}, "
                                                  f"Max Consecutive Closed: {detection_results.get('max_consecutive_eye_closed', 0)}, "
-                                                 f"Normal State Frames: {detection_results.get('normal_state_frames', 0)}")
+                                                 f"Normal State Frames: {detection_results.get('normal_state_frames', 0)}, "
+                                                 f"Head Turned: {is_head_turned}, Head Down: {is_head_down}")
 
                                     # Log drowsiness detection
                                     if analysis_result['is_drowsy']:
+                                        # Include head pose information in the log
+                                        head_pose = detection_results.get('head_pose', {})
+                                        is_head_turned = head_pose.get('is_head_turned', False)
+                                        is_head_down = head_pose.get('is_head_down', False)
+
                                         logging.warning(
                                             f"Drowsiness detected for device {evidence.get('deviceName')} "
                                             f"with {detection_results.get('yawn_count')} yawns and "
                                             f"{detection_results.get('eye_closed_frames')} closed eye frames. "
-                                            f"Confidence: {analysis_result['confidence']*100:.1f}%"
+                                            f"Confidence: {analysis_result['confidence']*100:.1f}%. "
+                                            f"Head Turned: {is_head_turned}, Head Down: {is_head_down}"
                                         )
                                 break  # Stop after processing first video file
 
@@ -211,12 +237,18 @@ def main():
                             data_manager.update_evidence_result(evidence_id, detection_results)
 
                             # Enhanced logging for debugging
+                            # Get head pose information for pending evidence
+                            head_pose = detection_results.get('head_pose', {})
+                            is_head_turned = head_pose.get('is_head_turned', False)
+                            is_head_down = head_pose.get('is_head_down', False)
+
                             logging.info(f"Updated pending evidence result - ID: {evidence_id}, "
                                          f"Yawns: {detection_results.get('yawn_count', 0)}, "
                                          f"Eye Closed Events: {detection_results.get('eye_closed_frames', 0)}, "
                                          f"Total Eye Closed Frames: {detection_results.get('total_eye_closed_frames', 0)}, "
                                          f"Max Consecutive Closed: {detection_results.get('max_consecutive_eye_closed', 0)}, "
-                                         f"Normal State Frames: {detection_results.get('normal_state_frames', 0)}")
+                                         f"Normal State Frames: {detection_results.get('normal_state_frames', 0)}, "
+                                         f"Head Turned: {is_head_turned}, Head Down: {is_head_down}")
 
                 # Wait for next interval
                 logging.info(f"Waiting {FETCH_INTERVAL_SECONDS} seconds until next fetch...")

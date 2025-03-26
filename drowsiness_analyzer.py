@@ -24,42 +24,6 @@ class DrowsinessAnalyzer(ABC):
         """
         pass
 
-class ThresholdBasedAnalyzer(DrowsinessAnalyzer):
-    """Simple threshold-based drowsiness analysis."""
-
-    def __init__(self, yawn_threshold, eye_closed_threshold):
-        self.yawn_threshold = yawn_threshold
-        self.eye_closed_threshold = eye_closed_threshold
-
-    def analyze(self, yawn_count, eye_closed_frames, total_frames):
-        logging.info(f"Analyzing drowsiness: Yawns={yawn_count}, Eye Closed Frames={eye_closed_frames}, Total Frames={total_frames}")
-
-        # Calculate basic metrics
-        eye_closed_ratio = eye_closed_frames / total_frames if total_frames > 0 else 0
-        yawn_rate = yawn_count / (total_frames / 30) if total_frames > 0 else 0  # Assuming 30 fps
-
-        # Check thresholds
-        is_drowsy_yawn = yawn_count > self.yawn_threshold
-        is_drowsy_eyes = eye_closed_frames > self.eye_closed_threshold
-
-        # Calculate confidence score (0-1)
-        yawn_confidence = min(yawn_count / (self.yawn_threshold * 2), 1.0)
-        eye_confidence = min(eye_closed_frames / (self.eye_closed_threshold * 2), 1.0)
-        confidence = max(yawn_confidence, eye_confidence)
-
-        return {
-            'is_drowsy': is_drowsy_yawn or is_drowsy_eyes,
-            'confidence': confidence,
-            'details': {
-                'yawn_count': yawn_count,
-                'eye_closed_frames': eye_closed_frames,
-                'eye_closed_ratio': eye_closed_ratio,
-                'yawn_rate': yawn_rate,
-                'yawn_threshold_exceeded': is_drowsy_yawn,
-                'eye_threshold_exceeded': is_drowsy_eyes
-            }
-        }
-
 class RateBasedAnalyzer(DrowsinessAnalyzer):
     """Rate-based drowsiness analysis using eye closure percentage and yawn frequency."""
 
@@ -78,9 +42,9 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         self.yawn_rate_threshold = yawn_rate_threshold
         self.normal_state_threshold = normal_state_threshold
         self.fps = fps
-        self.max_closure_duration_threshold = max_closure_duration_threshold 
+        self.max_closure_duration_threshold = max_closure_duration_threshold
         self.minimum_yawn_threshold = 1
-        self.minimum_eye_closed_threshold = 3 
+        self.minimum_eye_closed_threshold = 3
         self.normal_state_ratio_threshold = 5
         self.minimum_frames_for_analysis = 10
 
@@ -93,6 +57,13 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         total_eye_closed_frames = detection_results.get('total_eye_closed_frames', 0)
         max_consecutive_eye_closed = detection_results.get('max_consecutive_eye_closed', 0)
         fps = detection_results['metrics']['fps']
+
+        # Extract head pose information if available
+        head_pose = detection_results.get('head_pose', {})
+        is_head_turned = head_pose.get('is_head_turned', False)
+        is_head_down = head_pose.get('is_head_down', False)
+        head_turned_frames = head_pose.get('head_turned_frames', 0)
+        head_down_frames = head_pose.get('head_down_frames', 0)
 
         # Skip analysis if no detections
         if ((yawn_count == 0 or yawn_count is None) and
@@ -143,6 +114,9 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
                         yawn_rate_per_minute > self.yawn_rate_threshold)
         is_drowsy_excessive_yawns = yawn_count > 10 or yawn_rate_per_minute > 100
 
+        # Check if head pose indicates distraction (head down or turned)
+        is_head_distracted = is_head_turned or is_head_down
+
         # Check normal state conditions
         is_normal_state_high = normal_state_percentage >= self.normal_state_threshold
 
@@ -164,7 +138,14 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
             confidence = 0.1
             reason = 'high_normal_state'
         else:
-            is_drowsy = is_drowsy_eyes or is_drowsy_yawns
+            # Consider head pose when determining drowsiness
+            # If head is turned or down, we don't consider it drowsy even if other indicators are present
+            if is_head_distracted:
+                is_drowsy = False
+                reason = 'head_pose_override'
+                logging.info(f"Head pose override: Head turned={is_head_turned}, Head down={is_head_down}")
+            else:
+                is_drowsy = is_drowsy_eyes or is_drowsy_yawns
 
             # Calculate confidence based on new metrics - increased weight for eye closures
             eye_percentage_confidence = min(eye_closed_percentage / self.eye_closed_percentage_threshold, 1.0) if eye_closed_percentage > 0 else 0
@@ -201,6 +182,10 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
                 'is_drowsy_yawns': is_drowsy_yawns,
                 'is_drowsy_excessive_yawns': is_drowsy_excessive_yawns,
                 'is_normal_state_high': is_normal_state_high,
+                'is_head_turned': is_head_turned,
+                'is_head_down': is_head_down,
+                'head_turned_frames': head_turned_frames,
+                'head_down_frames': head_down_frames,
                 'yawn_count': yawn_count,
                 'eye_closed_frames': eye_closed_frames,
                 'total_eye_closed_frames': total_eye_closed_frames,
@@ -212,73 +197,6 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
 
         logging.info(f"Analysis result: {result}")
         return result
-
-class ProbabilisticAnalyzer(DrowsinessAnalyzer):
-    """Probabilistic drowsiness analysis using a sigmoid function."""
-
-    def __init__(self, a=0.5, b=5, c=3, fps=30):
-        """
-        Initialize the analyzer with parameters for the sigmoid function.
-
-        Args:
-            a (float): Weight for yawn rate
-            b (float): Weight for eye closure ratio
-            c (float): Threshold parameter
-            fps (int): Frames per second for time calculations
-        """
-        self.a = a  # Weight for yawn rate
-        self.b = b  # Weight for eye closure ratio
-        self.c = c  # Threshold shift for the sigmoid
-        self.fps = fps  # Frames per second
-
-    def analyze(self, yawn_count, eye_closed_frames, total_frames):
-        """
-        Analyze drowsiness based on yawn rate and eye closure ratio using a sigmoid function.
-
-        Args:
-            yawn_count (int): Number of yawns detected
-            eye_closed_frames (int): Number of frames with closed eyes
-            total_frames (int): Total number of frames processed
-
-        Returns:
-            dict: Analysis results with is_drowsy, confidence, and details
-        """
-        logging.info(f"Analyzing drowsiness: Yawns={yawn_count}, Eye Closed Frames={eye_closed_frames}, Total Frames={total_frames}")
-
-        # Handle edge case where no frames are processed
-        if total_frames == 0:
-            return {
-                'is_drowsy': False,
-                'confidence': 0.0,
-                'details': {
-                    'probability': 0.0
-                }
-            }
-
-        # Calculate time-based metrics
-        time_in_seconds = total_frames / self.fps
-        time_in_minutes = time_in_seconds / 60
-        yawn_rate = yawn_count / time_in_minutes if time_in_minutes > 0 else 0
-        eye_closed_ratio = eye_closed_frames / total_frames
-
-        # Calculate the linear combination
-        linear_comb = self.a * yawn_rate + self.b * eye_closed_ratio
-
-        # Calculate the probability using sigmoid
-        probability = 1 / (1 + math.exp(-(linear_comb - self.c)))
-
-        # Determine drowsiness based on probability > 0.5
-        is_drowsy = probability > 0.5
-
-        return {
-            'is_drowsy': is_drowsy,
-            'confidence': probability,
-            'details': {
-                'yawn_rate': yawn_rate,
-                'eye_closed_ratio': eye_closed_ratio,
-                'probability': probability
-            }
-        }
 
 # Factory function to create analyzers
 def create_analyzer(analyzer_type="threshold", **kwargs):
@@ -292,17 +210,7 @@ def create_analyzer(analyzer_type="threshold", **kwargs):
     Returns:
         DrowsinessAnalyzer: An instance of the requested analyzer
     """
-    if analyzer_type == "threshold":
-        yawn_threshold = kwargs.get('yawn_threshold', 3)
-        eye_closed_threshold = kwargs.get('eye_closed_threshold', 5)
-        return ThresholdBasedAnalyzer(yawn_threshold, eye_closed_threshold)
-    elif analyzer_type == "rate":
+    if analyzer_type == "rate":
         return RateBasedAnalyzer()
-    elif analyzer_type == "probabilistic":
-        a = kwargs.get('a', 0.5)
-        b = kwargs.get('b', 0.5)
-        c = kwargs.get('c', 3)
-        fps = kwargs.get('fps', 20)
-        return ProbabilisticAnalyzer(a, b, c, fps)
     else:
         raise ValueError(f"Unknown analyzer type: {analyzer_type}")

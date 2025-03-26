@@ -7,6 +7,7 @@ from ultralytics import YOLO
 import requests
 import time
 from dotenv import load_dotenv
+from pose_head_detector import PoseHeadDetector
 
 class YoloProcessor:
     def __init__(self, model_path, drowsiness_threshold_yawn=6, drowsiness_threshold_eye_closed=35):
@@ -23,6 +24,10 @@ class YoloProcessor:
         self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '1'))  # Minimum frames for a blink (reduced from 3 to 1)
         self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '2'))  # Frames to wait before counting next blink (reduced from 15 to 5)
         self.confidence_threshold = float(os.getenv('EYE_DETECTION_CONFIDENCE', '0.6'))  # Minimum confidence for eye closed detection (reduced from 0.6 to 0.5)
+
+        # Initialize pose head detector
+        self.pose_model_path = os.getenv('POSE_MODEL_PATH', 'models\yolov8l-pose.pt')
+        self.pose_detector = PoseHeadDetector(self.pose_model_path)
 
     def load_model(self):
         """Loads and returns a YOLO model for drowsiness detection."""
@@ -98,12 +103,21 @@ class YoloProcessor:
             # Apply image enhancement
             frame = cv2.convertScaleAbs(frame, alpha=1.2, beta=10)
 
+            # Process with main YOLO model
             results = self.model(frame, verbose=False)
+
+            # Process with pose detector
+            pose_results = self.pose_detector.process_frame(frame)
 
             if not results:
                 return None
 
-            return results
+            # Return a dictionary with both results
+            # We don't modify the results object directly since it's a list
+            return {
+                'detection_results': results,
+                'pose_results': pose_results
+            }
 
         except Exception as e:
             logging.error(f"Error processing frame: {e}")
@@ -132,10 +146,16 @@ class YoloProcessor:
             # New variables for improved metrics
             total_eye_closed_frames = 0
             max_consecutive_eye_closed = 0
+            # Head pose detection counters
+            head_turned_frames = 0
+            head_down_frames = 0
 
             cap = cv2.VideoCapture(local_video_path)
             fps = cap.get(cv2.CAP_PROP_FPS)
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+            # Reset pose detector frame counters with video FPS
+            self.pose_detector.reset_frame_counters(fps)
 
             if fps <= 0 or total_frames <= 0:
                 logging.error("Invalid video properties")
@@ -164,7 +184,21 @@ class YoloProcessor:
                     continue
 
                 # Process detections
-                for result in results:
+                # Extract detection and pose results
+                detection_results = results.get('detection_results', [])
+                pose_results = results.get('pose_results', {})
+
+                # Process pose results first
+                if pose_results:
+                    if pose_results.get('head_turned', False):
+                        head_turned_frames += 1
+                        logging.info(f"Head turned detected: {pose_results.get('head_turned_counter', 0)}/{pose_results.get('head_turned_threshold', 0)}")
+                    if pose_results.get('head_down', False):
+                        head_down_frames += 1
+                        logging.info(f"Head down detected: {pose_results.get('head_down_counter', 0)}/{pose_results.get('head_down_threshold', 0)}")
+
+                # Process object detection results
+                for result in detection_results:
                     # Normal state detection (class 1)
                     normal_state = result.boxes[result.boxes.cls == 1]
                     confident_normal = normal_state[normal_state.conf >= self.confidence_threshold]
@@ -248,6 +282,12 @@ class YoloProcessor:
                 'early_detection': False,
                 'process_time': process_time,  # Add processing time in seconds
                 'model_name': self.model_name,  # Add model name
+                'head_pose': {
+                    'head_turned_frames': head_turned_frames,
+                    'head_down_frames': head_down_frames,
+                    'is_head_turned': head_turned_frames > 0,
+                    'is_head_down': head_down_frames > 0
+                },
                 'metrics': {
                     'consecutive_eye_closed': consecutive_eye_closed,
                     'consecutive_normal_state': consecutive_normal_state,
