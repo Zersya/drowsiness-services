@@ -275,7 +275,7 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
             }
         }
 
-        logging.info(f"Analysis result: is_drowsy={result['is_drowsy']}, score={result['confidence_score']:.3f}, reason={result['details']['reason']}")
+        logging.info(f"Analysis result: is_drowsy={result['is_drowsy']}, score={result['confidence']:.3f}, reason={result['details']['reason']}")
         return result
 
 class ProbabilisticAnalyzer(DrowsinessAnalyzer):
