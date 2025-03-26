@@ -696,6 +696,331 @@ def export_data():
     finally:
         conn.close()
 
+@app.route('/export_incorrect_predictions')
+@login_required
+def export_incorrect_predictions():
+    try:
+        conn = get_db_connection()
+
+        # Get filter parameters
+        event_types = request.args.getlist('event_type')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        status_types = request.args.getlist('status')
+        model_names = request.args.getlist('model_name')
+
+        # Set default event types if none are provided
+        if not event_types:
+            event_types = ['yawning', 'eye_closed']
+
+        # Set default status types if none are provided
+        if not status_types:
+            status_types = ['all']
+
+        # Set default model_names if none are provided
+        if not model_names:
+            model_names = ['all']
+
+        # Initialize params list for SQL queries
+        params = []
+        conditions = []
+
+        # Add date range conditions
+        if start_date:
+            conditions.append("DATE(er.alarm_time) >= DATE(?)")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(er.alarm_time) <= DATE(?)")
+            params.append(end_date)
+
+        # Add event type conditions
+        if event_types and 'all' not in event_types:
+            event_conditions = []
+            for event_type in event_types:
+                if event_type == 'yawning':
+                    event_conditions.append("er.alarm_type_value LIKE '%Yawning%'")
+                elif event_type == 'eye_closed':
+                    event_conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
+
+            if event_conditions:
+                conditions.append("(" + " OR ".join(event_conditions) + ")")
+
+        # Add status conditions
+        if status_types and 'all' not in status_types:
+            status_conditions = []
+            for status in status_types:
+                status_conditions.append(f"er.processing_status = '{status}'")
+
+            if status_conditions:
+                conditions.append("(" + " OR ".join(status_conditions) + ")")
+
+        # Add model_name conditions
+        if model_names and 'all' not in model_names:
+            model_conditions = []
+            for model_name in model_names:
+                model_conditions.append(f"er.model_name = '{model_name}'")
+
+            if model_conditions:
+                conditions.append("(" + " OR ".join(model_conditions) + ")")
+
+        # Add condition for incorrect predictions
+        # This is the key part: we want records where takeType and is_drowsy don't match
+        # True Alarm (takeType=0) but Not Drowsy (is_drowsy=0) OR False Alarm (takeType=1) but Drowsy (is_drowsy=1)
+        conditions.append("((er.takeType = 0 AND er.is_drowsy = 0) OR (er.takeType = 1 AND er.is_drowsy = 1))")
+
+        # Ensure we only get processed records with takeType values
+        conditions.append("er.processing_status = 'processed'")
+        conditions.append("er.takeType IS NOT NULL")
+
+        # Construct the WHERE clause
+        where_clause = " WHERE " + " AND ".join(conditions)
+
+        # Get all filtered evidence results
+        query = f'''
+            SELECT
+                er.alarm_type_value as event_type,
+                er.is_drowsy,
+                er.yawn_count,
+                er.eye_closed_frames,
+                er.processing_status,
+                CASE
+                    WHEN er.takeType = 0 THEN 'True Alarm'
+                    WHEN er.takeType = 1 THEN 'False Alarm'
+                    ELSE '-'
+                END as take_type,
+                er.takeup_memo as memo,
+                er.takeup_time as memo_time,
+                er.takeup_user as memo_user,
+                CASE
+                    WHEN er.review_type = 0 THEN 'True Alarm'
+                    WHEN er.review_type = 1 THEN 'False Alarm'
+                    ELSE '-'
+                END as review_type,
+                er.details
+            FROM evidence_results er
+            {where_clause}
+            ORDER BY er.alarm_time DESC
+        '''
+
+        cursor = conn.execute(query, params)
+        results = cursor.fetchall()
+
+        # Create CSV in memory
+        si = StringIO()
+        writer = csv.writer(si)
+
+        # Write headers
+        writer.writerow([
+            'Event Type', 'Drowsy',
+            'Yawn Count', 'Eyes Closed Frames', 'Status', 'Take Type',
+            'Memo', 'Memo User', 'Memo Time', 'Review Type', 'Details'
+        ])
+
+        # Write data
+        for row in results:
+            # Parse details JSON if it exists
+            details_str = '-'
+            if row['details']:
+                try:
+                    import json
+                    details_dict = json.loads(row['details'])
+                    # Format the details for better display
+                    details_str = json.dumps(details_dict, indent=2)
+                except Exception as e:
+                    details_str = row['details']
+
+            writer.writerow([
+                row['event_type'],
+                'Yes' if row['is_drowsy'] else 'No',
+                row['yawn_count'] or 0,
+                row['eye_closed_frames'] or 0,
+                row['processing_status'],
+                row['take_type'],
+                row['memo'] or '-',
+                row['memo_user'] or '-',
+                row['memo_time'] or '-',
+                row['review_type'],
+                details_str
+            ])
+
+        # Create response
+        output = si.getvalue()
+        si.close()
+
+        return Response(
+            output,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': 'attachment; filename=incorrect_drowsiness_predictions.csv',
+                'Content-Type': 'text/csv'
+            }
+        )
+
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+    finally:
+        conn.close()
+
+@app.route('/export_all_predictions')
+@login_required
+def export_all_predictions():
+    try:
+        conn = get_db_connection()
+
+        # Get filter parameters
+        event_types = request.args.getlist('event_type')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        status_types = request.args.getlist('status')
+        model_names = request.args.getlist('model_name')
+
+        # Set default event types if none are provided
+        if not event_types:
+            event_types = ['yawning', 'eye_closed']
+
+        # Set default status types if none are provided
+        if not status_types:
+            status_types = ['all']
+
+        # Set default model_names if none are provided
+        if not model_names:
+            model_names = ['all']
+
+        # Initialize params list for SQL queries
+        params = []
+        conditions = []
+
+        # Add date range conditions
+        if start_date:
+            conditions.append("DATE(er.alarm_time) >= DATE(?)")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(er.alarm_time) <= DATE(?)")
+            params.append(end_date)
+
+        # Add event type conditions
+        if event_types and 'all' not in event_types:
+            event_conditions = []
+            for event_type in event_types:
+                if event_type == 'yawning':
+                    event_conditions.append("er.alarm_type_value LIKE '%Yawning%'")
+                elif event_type == 'eye_closed':
+                    event_conditions.append("er.alarm_type_value LIKE '%Eye closed%'")
+
+            if event_conditions:
+                conditions.append("(" + " OR ".join(event_conditions) + ")")
+
+        # Add status conditions
+        if status_types and 'all' not in status_types:
+            status_conditions = []
+            for status in status_types:
+                status_conditions.append(f"er.processing_status = '{status}'")
+
+            if status_conditions:
+                conditions.append("(" + " OR ".join(status_conditions) + ")")
+
+        # Add model_name conditions
+        if model_names and 'all' not in model_names:
+            model_conditions = []
+            for model_name in model_names:
+                model_conditions.append(f"er.model_name = '{model_name}'")
+
+            if model_conditions:
+                conditions.append("(" + " OR ".join(model_conditions) + ")")
+
+        # Ensure we only get processed records with takeType values
+        conditions.append("er.processing_status = 'processed'")
+        conditions.append("er.takeType IS NOT NULL")
+
+        # Construct the WHERE clause
+        where_clause = " WHERE " + " AND ".join(conditions)
+
+        # Get all filtered evidence results
+        query = f'''
+            SELECT
+                er.alarm_type_value as event_type,
+                er.is_drowsy,
+                er.yawn_count,
+                er.eye_closed_frames,
+                er.processing_status,
+                CASE
+                    WHEN er.takeType = 0 THEN 'True Alarm'
+                    WHEN er.takeType = 1 THEN 'False Alarm'
+                    ELSE '-'
+                END as take_type,
+                er.takeup_memo as memo,
+                er.takeup_time as memo_time,
+                er.takeup_user as memo_user,
+                CASE
+                    WHEN er.review_type = 0 THEN 'True Alarm'
+                    WHEN er.review_type = 1 THEN 'False Alarm'
+                    ELSE '-'
+                END as review_type,
+                er.details
+            FROM evidence_results er
+            {where_clause}
+            ORDER BY er.alarm_time DESC
+        '''
+
+        cursor = conn.execute(query, params)
+        results = cursor.fetchall()
+
+        # Create CSV in memory
+        si = StringIO()
+        writer = csv.writer(si)
+
+        # Write headers
+        writer.writerow([
+            'Event Type', 'Drowsy',
+            'Yawn Count', 'Eyes Closed Frames', 'Status', 'Take Type',
+            'Memo', 'Memo User', 'Memo Time', 'Review Type', 'Details'
+        ])
+
+        # Write data
+        for row in results:
+            # Parse details JSON if it exists
+            details_str = '-'
+            if row['details']:
+                try:
+                    import json
+                    details_dict = json.loads(row['details'])
+                    # Format the details for better display
+                    details_str = json.dumps(details_dict, indent=2)
+                except Exception as e:
+                    details_str = row['details']
+
+            writer.writerow([
+                row['event_type'],
+                'Yes' if row['is_drowsy'] else 'No',
+                row['yawn_count'] or 0,
+                row['eye_closed_frames'] or 0,
+                row['processing_status'],
+                row['take_type'],
+                row['memo'] or '-',
+                row['memo_user'] or '-',
+                row['memo_time'] or '-',
+                row['review_type'],
+                details_str
+            ])
+
+        # Create response
+        output = si.getvalue()
+        si.close()
+
+        return Response(
+            output,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': 'attachment; filename=all_drowsiness_predictions.csv',
+                'Content-Type': 'text/csv'
+            }
+        )
+
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+    finally:
+        conn.close()
+
 # Detail view route
 @app.route('/detail/<int:row_id>')
 def detail_view(row_id):
