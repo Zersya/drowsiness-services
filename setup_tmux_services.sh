@@ -30,7 +30,8 @@ start_service() {
 start_service "service1" "python drowsiness_detector.py"
 start_service "service2" "python web_server.py"
 start_service "service3" "cloudflared tunnel run"
+start_service "service4" "python api_server.py"
 
 echo "All services started. Use 'tmux ls' to see sessions."
-echo "To attach: 'tmux attach -t service1' (or service2, service3)"
+echo "To attach: 'tmux attach -t service1' (or service2, service3, service4)"
 echo "To detach: Ctrl+B, then D"
