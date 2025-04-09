@@ -26,8 +26,14 @@ logging.basicConfig(
 )
 
 app = Flask(__name__)
-# Enable CORS for all routes with explicit allow all origins
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+# Enable CORS for all routes with explicit allow all origins and methods
+CORS(app, resources={r"/*": {
+    "origins": "*",
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "X-API-Key"],
+    "expose_headers": ["Content-Type", "X-Total-Count"],
+    "supports_credentials": True
+}})
 
 # Set secure cookie
 app.config['SESSION_COOKIE_SECURE'] = True
