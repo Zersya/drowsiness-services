@@ -65,6 +65,19 @@ def is_ajax_request():
 def verify_auth():
     """Verify authentication based on AUTH_TYPE."""
     if AUTH_TYPE == "KEYCLOAK":
+        # Check for Bearer token in Authorization header first
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            try:
+                if auth_service.verify_token(token):
+                    return True
+                return False
+            except Exception as e:
+                logging.error(f"Bearer token verification error: {str(e)}")
+                return False
+
+        # Fallback to session-based auth for backward compatibility
         if 'token' not in session:
             return False
         try:
@@ -88,9 +101,16 @@ def verify_auth():
             # If we get here, both verification and refresh failed
             return False
         except Exception as e:
-            logging.error(f"Auth verification error: {str(e)}")
+            logging.error(f"Session auth verification error: {str(e)}")
             return False
     else:  # PIN-based auth
+        # Check for Bearer token in Authorization header first
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            return token == WEB_ACCESS_PIN
+
+        # Fallback to session-based auth for backward compatibility
         return session.get('authenticated', False)
 
 def api_key_auth():
