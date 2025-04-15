@@ -14,6 +14,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 from dotenv import load_dotenv
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 # Set up logging
 logging.basicConfig(
@@ -34,6 +36,8 @@ POSE_MODEL_PATH = os.getenv("POSE_MODEL_PATH", "yolov8l-pose.pt")
 USE_CUDA = os.getenv('USE_CUDA', 'true').lower() == 'true'
 DB_PATH = "simplify_detection.db"
 PORT = int(os.getenv('SIMPLIFY_PORT', 8002))
+MAX_WORKERS = int(os.getenv('MAX_WORKERS', 1))  # Maximum number of concurrent video processing workers
+QUEUE_CHECK_INTERVAL = int(os.getenv('QUEUE_CHECK_INTERVAL', 5))  # Seconds between queue checks
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -93,6 +97,19 @@ class DatabaseManager:
         """Add a video URL to the processing queue."""
         try:
             with sqlite3.connect(self.db_path) as conn:
+                # Check if this URL is already in the queue with status 'pending' or 'processing'
+                cursor = conn.execute(
+                    'SELECT id, status FROM processing_queue WHERE video_url = ? AND status IN ("pending", "processing")',
+                    (video_url,)
+                )
+                existing = cursor.fetchone()
+
+                if existing:
+                    queue_id, status = existing
+                    logging.info(f"Video already in queue: {video_url}, ID: {queue_id}, Status: {status}")
+                    return queue_id
+
+                # Add new entry to queue
                 cursor = conn.execute(
                     'INSERT INTO processing_queue (video_url, status) VALUES (?, ?)',
                     (video_url, 'pending')
@@ -119,6 +136,61 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logging.error(f"Error updating queue status: {e}")
             return False
+
+    def get_queue_status(self, queue_id):
+        """Get the status of a queued item."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT id, video_url, status, created_at FROM processing_queue WHERE id = ?',
+                    (queue_id,)
+                )
+                result = cursor.fetchone()
+                if result:
+                    return dict(result)
+                return None
+        except sqlite3.Error as e:
+            logging.error(f"Error getting queue status: {e}")
+            return None
+
+    def get_next_pending_video(self):
+        """Get the next pending video from the queue."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT id, video_url FROM processing_queue WHERE status = "pending" ORDER BY created_at ASC LIMIT 1'
+                )
+                result = cursor.fetchone()
+                if result:
+                    # Update status to 'processing'
+                    conn.execute(
+                        'UPDATE processing_queue SET status = "processing" WHERE id = ?',
+                        (result['id'],)
+                    )
+                    conn.commit()
+                    return dict(result)
+                return None
+        except sqlite3.Error as e:
+            logging.error(f"Error getting next pending video: {e}")
+            return None
+
+    def get_queue_stats(self):
+        """Get statistics about the processing queue."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    'SELECT status, COUNT(*) as count FROM processing_queue GROUP BY status'
+                )
+                results = cursor.fetchall()
+                stats = {}
+                for status, count in results:
+                    stats[status] = count
+                return stats
+        except sqlite3.Error as e:
+            logging.error(f"Error getting queue stats: {e}")
+            return {}
 
     def store_evidence_result(self, video_url, detection_results, analysis_result, process_time, head_pose=None):
         """Store evidence result in the database."""
@@ -306,7 +378,7 @@ class PoseHeadDetector:
                         eye_midpoint = (left_eye + right_eye) / 2
 
                         # Check for head turn (asymmetry between eyes and nose)
-                        eye_distance = np.linalg.norm(left_eye - right_eye)
+                        # Calculate distances between facial landmarks
                         nose_to_left = np.linalg.norm(nose - left_eye)
                         nose_to_right = np.linalg.norm(nose - right_eye)
 
@@ -447,8 +519,7 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
                 }
             }
 
-        # Calculate time-based metrics for max_closure_duration
-        time_in_seconds = total_frames / fps if fps > 0 else 0
+        # Calculate metrics based on video properties
 
         # Calculate percentage metrics
         eye_closed_percentage = (eye_closed_frames / total_frames) * 100 if total_frames > 0 else 0
@@ -890,44 +961,20 @@ db_manager = DatabaseManager()
 yolo_processor = YoloProcessor()
 drowsiness_analyzer = create_analyzer(analyzer_type="rate")
 
+# Create a thread pool for processing videos
+processing_pool = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 
-# API Endpoints
-@app.route('/')
-def index():
-    """API root endpoint."""
-    return jsonify({
-        'message': 'Simplified Drowsiness Detection API',
-        'version': '1.0.0',
-        'endpoints': [
-            '/api/process',
-            '/api/results',
-            '/api/result/<id>'
-        ]
-    })
+# Flag to control the background worker
+shutdown_flag = threading.Event()
 
+def process_video_task(queue_item):
+    """Process a video from the queue."""
+    queue_id = queue_item['id']
+    video_url = queue_item['video_url']
 
-@app.route('/api/process', methods=['POST'])
-def process_video():
-    """Process a video for drowsiness detection."""
+    logging.info(f"Processing video from queue: {queue_id}, URL: {video_url}")
+
     try:
-        # Get video URL from request
-        data = request.get_json()
-        if not data or 'video_url' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Missing video_url in request'
-            }), 400
-
-        video_url = data['video_url']
-
-        # Add to processing queue
-        queue_id = db_manager.add_to_queue(video_url)
-        if not queue_id:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to add video to processing queue'
-            }), 500
-
         # Process the video
         start_time = time.time()
         processing_success, detection_results = yolo_processor.process_video(video_url)
@@ -967,11 +1014,7 @@ def process_video():
             except Exception as e:
                 logging.error(f"Error storing failed evidence record: {e}")
 
-            return jsonify({
-                'success': False,
-                'error': 'Failed to process video',
-                'details': 'The video file may be corrupted or in an unsupported format'
-            }), 500
+            return
 
         # Analyze drowsiness
         analysis_result = drowsiness_analyzer.analyze(detection_results)
@@ -988,33 +1031,183 @@ def process_video():
         # Update queue status
         db_manager.update_queue_status(queue_id, 'completed')
 
-        # Return results
+        logging.info(f"Completed processing video from queue: {queue_id}, Evidence ID: {evidence_id}")
+
+    except Exception as e:
+        logging.error(f"Error processing video from queue: {e}")
+        db_manager.update_queue_status(queue_id, 'failed')
+
+def queue_worker():
+    """Background worker to process videos from the queue."""
+    logging.info("Starting queue worker thread")
+
+    while not shutdown_flag.is_set():
+        try:
+            # Check if we have capacity to process more videos
+            if processing_pool._work_queue.qsize() < MAX_WORKERS:
+                # Get the next pending video from the queue
+                queue_item = db_manager.get_next_pending_video()
+
+                if queue_item:
+                    # Submit the video for processing
+                    processing_pool.submit(process_video_task, queue_item)
+                    logging.info(f"Submitted video for processing: {queue_item['id']}")
+
+            # Wait before checking the queue again
+            time.sleep(QUEUE_CHECK_INTERVAL)
+
+        except Exception as e:
+            logging.error(f"Error in queue worker: {e}")
+            time.sleep(QUEUE_CHECK_INTERVAL)
+
+    logging.info("Queue worker thread shutting down")
+
+# Start the queue worker thread
+queue_worker_thread = threading.Thread(target=queue_worker, daemon=True)
+queue_worker_thread.start()
+
+
+# API Endpoints
+@app.route('/')
+def index():
+    """API root endpoint."""
+    return jsonify({
+        'message': 'Simplified Drowsiness Detection API',
+        'version': '1.1.0',
+        'endpoints': [
+            '/api/process',          # Add a video to the processing queue
+            '/api/queue/<id>',       # Check the status of a queued video
+            '/api/queue',            # Get queue statistics
+            '/api/results',          # Get all processed videos
+            '/api/result/<id>'       # Get details for a specific processed video
+        ]
+    })
+
+
+@app.route('/api/process', methods=['POST'])
+def process_video():
+    """Add a video to the processing queue."""
+    try:
+        # Get video URL from request
+        data = request.get_json()
+        if not data or 'video_url' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing video_url in request'
+            }), 400
+
+        video_url = data['video_url']
+
+        # Add to processing queue
+        queue_id = db_manager.add_to_queue(video_url)
+        if not queue_id:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to add video to processing queue'
+            }), 500
+
+        # Return queue ID immediately
         return jsonify({
             'success': True,
-            'message': 'Video processed successfully',
+            'message': 'Video added to processing queue',
             'data': {
-                'evidence_id': evidence_id,
-                'is_drowsy': analysis_result.get('is_drowsy'),
-                'confidence': analysis_result.get('confidence'),
-                'process_time': process_time,
-                'detection_results': {
-                    'yawn_frames': detection_results.get('yawn_frames', 0),
-                    'yawn_percentage': analysis_result.get('details', {}).get('yawn_percentage', 0),
-                    'eye_closed_frames': detection_results.get('eye_closed_frames', 0),
-                    'eye_closed_percentage': analysis_result.get('details', {}).get('eye_closed_percentage', 0),
-
-                    # Maximum duration (frames) of eye closure in seconds
-                    'max_consecutive_eye_closed': detection_results.get('max_consecutive_eye_closed', 0),
-                    'normal_state_frames': detection_results.get('normal_state_frames', 0),
-                    'total_frames': detection_results.get('total_frames', 0),
-                    'is_head_turned': detection_results.get('head_pose', {}).get('head_turned', False),
-                    'is_head_down': detection_results.get('head_pose', {}).get('head_down', False)
-                }
+                'queue_id': queue_id,
+                'status': 'pending',
+                'status_url': f'/api/queue/{queue_id}'
             }
         })
 
     except Exception as e:
-        logging.error(f"Error processing video: {e}")
+        logging.error(f"Error adding video to queue: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/queue/<int:queue_id>', methods=['GET'])
+def get_queue_status(queue_id):
+    """Get the status of a queued video."""
+    try:
+        # Get queue status
+        queue_status = db_manager.get_queue_status(queue_id)
+        if not queue_status:
+            return jsonify({
+                'success': False,
+                'error': f'Queue item with ID {queue_id} not found'
+            }), 404
+
+        # Check if processing is complete
+        if queue_status['status'] == 'completed':
+            # Find the evidence result
+            with sqlite3.connect(db_manager.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT id FROM evidence_results WHERE video_url = ? ORDER BY created_at DESC LIMIT 1',
+                    (queue_status['video_url'],)
+                )
+                evidence = cursor.fetchone()
+                evidence_id = evidence['id'] if evidence else None
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'queue_id': queue_id,
+                    'status': queue_status['status'],
+                    'video_url': queue_status['video_url'],
+                    'created_at': queue_status['created_at'],
+                    'evidence_id': evidence_id,
+                    'result_url': f'/api/result/{evidence_id}' if evidence_id else None
+                }
+            })
+        elif queue_status['status'] == 'failed':
+            return jsonify({
+                'success': True,
+                'data': {
+                    'queue_id': queue_id,
+                    'status': queue_status['status'],
+                    'video_url': queue_status['video_url'],
+                    'created_at': queue_status['created_at'],
+                    'error': 'Video processing failed'
+                }
+            })
+        else:  # pending or processing
+            return jsonify({
+                'success': True,
+                'data': {
+                    'queue_id': queue_id,
+                    'status': queue_status['status'],
+                    'video_url': queue_status['video_url'],
+                    'created_at': queue_status['created_at']
+                }
+            })
+
+    except Exception as e:
+        logging.error(f"Error getting queue status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/queue', methods=['GET'])
+def get_queue_stats():
+    """Get statistics about the processing queue."""
+    try:
+        # Get queue stats
+        stats = db_manager.get_queue_stats()
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'stats': stats,
+                'worker_threads': MAX_WORKERS,
+                'active_tasks': processing_pool._work_queue.qsize()
+            }
+        })
+
+    except Exception as e:
+        logging.error(f"Error getting queue stats: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -1077,4 +1270,14 @@ def get_result(evidence_id):
 # Main function
 if __name__ == '__main__':
     logging.info(f"Starting Simplified Drowsiness Detection API on port {PORT}")
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    try:
+        app.run(host='0.0.0.0', port=PORT, debug=False)
+    except KeyboardInterrupt:
+        logging.info("Shutting down...")
+        # Signal the queue worker to stop
+        shutdown_flag.set()
+        # Wait for the queue worker to finish
+        queue_worker_thread.join(timeout=5)
+        # Shutdown the thread pool
+        processing_pool.shutdown(wait=False)
+        logging.info("Shutdown complete")
