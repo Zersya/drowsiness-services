@@ -10,6 +10,10 @@ if ! command -v tmux &> /dev/null; then
     sudo apt install tmux -y
 fi
 
+# Change to working directory and activate virtual environment
+cd $WORK_DIR
+source .venv/bin/activate
+
 # Function to start a service in a tmux session
 start_service() {
     SESSION_NAME=$1
