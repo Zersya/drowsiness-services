@@ -73,19 +73,52 @@ class YoloProcessor:
             video_id = hashlib.md5(url.encode()).hexdigest()
             local_path = os.path.join(temp_dir, f"{video_id}.mp4")
 
+            # If file exists but is very small (likely corrupted), remove it
+            if os.path.exists(local_path):
+                file_size = os.path.getsize(local_path)
+                if file_size < 1024:  # Less than 1KB
+                    logging.warning(f"Found existing but potentially corrupted video file (size: {file_size} bytes). Removing it.")
+                    os.remove(local_path)
+
             # Download file if it doesn't exist
             if not os.path.exists(local_path):
                 logging.info(f"Downloading video from {url}")
-                response = requests.get(url, stream=True)
+                response = requests.get(url, stream=True, timeout=30)  # Add timeout
                 response.raise_for_status()
+
+                # Check content type to ensure it's a video
+                content_type = response.headers.get('content-type', '')
+                if not ('video' in content_type or 'octet-stream' in content_type):
+                    logging.warning(f"Content type '{content_type}' may not be a video")
+
+                # Get content length if available
+                content_length = response.headers.get('content-length')
+                if content_length:
+                    content_length = int(content_length)
+                    logging.info(f"Video file size: {content_length / 1024:.2f} KB")
 
                 with open(local_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
 
+                # Verify the downloaded file
+                if os.path.exists(local_path):
+                    file_size = os.path.getsize(local_path)
+                    if file_size < 1024:  # Less than 1KB
+                        logging.error(f"Downloaded file is too small ({file_size} bytes), likely corrupted")
+                        os.remove(local_path)
+                        return None
+                    logging.info(f"Successfully downloaded video to {local_path} (size: {file_size / 1024:.2f} KB)")
+
             return local_path
 
+        except requests.exceptions.Timeout:
+            logging.error(f"Timeout while downloading video from {url}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Request error while downloading video: {e}")
+            return None
         except Exception as e:
             logging.error(f"Error downloading video: {e}")
             return None
@@ -150,15 +183,28 @@ class YoloProcessor:
             head_turned_frames = 0
             head_down_frames = 0
 
+            # Try to open the video file
             cap = cv2.VideoCapture(local_video_path)
+
+            # Check if the video file was opened successfully
+            if not cap.isOpened():
+                logging.error(f"Failed to open video file: {local_video_path}")
+                return False, None
+
+            # Get video properties
             fps = cap.get(cv2.CAP_PROP_FPS)
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+            # Log video properties for debugging
+            logging.info(f"Video properties - FPS: {fps}, Total frames: {total_frames}")
 
             # Reset pose detector frame counters with video FPS
             self.pose_detector.reset_frame_counters(fps)
 
+            # Validate video properties
             if fps <= 0 or total_frames <= 0:
-                logging.error("Invalid video properties")
+                logging.error("Invalid video properties - FPS or frame count is zero or negative")
+                cap.release()
                 return False, None
 
             logging.info(f"Processing video: {total_frames} frames at {fps} FPS")

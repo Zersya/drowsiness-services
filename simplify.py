@@ -666,22 +666,52 @@ class YoloProcessor:
             url_hash = hashlib.md5(video_url.encode()).hexdigest()
             temp_path = f"temp_{url_hash}.mp4"
 
-            # Check if the file already exists (from a previous download)
+            # If file exists but is very small (likely corrupted), remove it
             if os.path.exists(temp_path):
-                logging.info(f"Using cached video file: {temp_path}")
-                return temp_path
+                file_size = os.path.getsize(temp_path)
+                if file_size < 1024:  # Less than 1KB
+                    logging.warning(f"Found existing but potentially corrupted video file (size: {file_size} bytes). Removing it.")
+                    os.remove(temp_path)
+                else:
+                    logging.info(f"Using cached video file: {temp_path} (size: {file_size / 1024:.2f} KB)")
+                    return temp_path
 
             logging.info(f"Downloading video from {video_url}")
-            response = requests.get(video_url, stream=True)
+            response = requests.get(video_url, stream=True, timeout=30)  # Add timeout
             response.raise_for_status()  # Raise an exception for HTTP errors
+
+            # Check content type to ensure it's a video
+            content_type = response.headers.get('content-type', '')
+            if not ('video' in content_type or 'octet-stream' in content_type):
+                logging.warning(f"Content type '{content_type}' may not be a video")
+
+            # Get content length if available
+            content_length = response.headers.get('content-length')
+            if content_length:
+                content_length = int(content_length)
+                logging.info(f"Video file size: {content_length / 1024:.2f} KB")
 
             # Save the video to a temporary file
             with open(temp_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
 
-            logging.info(f"Video downloaded to {temp_path}")
+            # Verify the downloaded file
+            if os.path.exists(temp_path):
+                file_size = os.path.getsize(temp_path)
+                if file_size < 1024:  # Less than 1KB
+                    logging.error(f"Downloaded file is too small ({file_size} bytes), likely corrupted")
+                    os.remove(temp_path)
+                    return None
+                logging.info(f"Successfully downloaded video to {temp_path} (size: {file_size / 1024:.2f} KB)")
+
             return temp_path
+        except requests.exceptions.Timeout:
+            logging.error(f"Timeout while downloading video from {video_url}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Request error while downloading video: {e}")
+            return None
         except Exception as e:
             logging.error(f"Error downloading video: {e}")
             return None
@@ -702,13 +732,39 @@ class YoloProcessor:
             cap = cv2.VideoCapture(temp_video_path)
             if not cap.isOpened():
                 logging.error(f"Error opening video file: {temp_video_path}")
+                # Clean up the file if it can't be opened
+                try:
+                    if os.path.exists(temp_video_path):
+                        os.remove(temp_video_path)
+                        logging.info(f"Removed corrupted video file: {temp_video_path}")
+                except Exception as e:
+                    logging.warning(f"Failed to remove corrupted video file: {e}")
                 return False, {}
 
             # Get video properties
             self.total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             self.current_fps = cap.get(cv2.CAP_PROP_FPS)
+
+            # Log video properties for debugging
+            logging.info(f"Video properties - FPS: {self.current_fps}, Total frames: {self.total_frames}")
+
+            # Validate video properties
+            if self.total_frames <= 0 or self.current_fps <= 0:
+                logging.error(f"Invalid video properties - FPS: {self.current_fps}, Total frames: {self.total_frames}")
+                cap.release()
+                # Clean up the file if it has invalid properties
+                try:
+                    if os.path.exists(temp_video_path):
+                        os.remove(temp_video_path)
+                        logging.info(f"Removed video file with invalid properties: {temp_video_path}")
+                except Exception as e:
+                    logging.warning(f"Failed to remove video file with invalid properties: {e}")
+                return False, {}
+
+            # Use default FPS if needed
             if self.current_fps <= 0:
                 self.current_fps = 20  # Default FPS if not available
+                logging.warning(f"Using default FPS value: {self.current_fps}")
 
             # Update pose detector FPS
             self.pose_detector.update_frame_thresholds(self.current_fps)
@@ -878,10 +934,43 @@ def process_video():
         process_time = time.time() - start_time
 
         if not processing_success:
+            # Update queue status to failed
             db_manager.update_queue_status(queue_id, 'failed')
+
+            # Store the failed evidence with status 'failed'
+            try:
+                # Create a minimal evidence record for the failed video
+                failed_evidence = {
+                    'video_url': video_url,
+                    'processing_status': 'failed',
+                    'process_time': process_time,
+                    'details': json.dumps({
+                        'error': 'Failed to process video',
+                        'timestamp': datetime.datetime.now().isoformat()
+                    })
+                }
+
+                # Insert into database with a direct SQL query to handle the failed case
+                with sqlite3.connect(db_manager.db_path) as conn:
+                    conn.execute('''
+                        INSERT INTO evidence_results (
+                            video_url, process_time, processing_status, details
+                        ) VALUES (?, ?, ?, ?)
+                    ''', (
+                        video_url,
+                        process_time,
+                        'failed',
+                        failed_evidence['details']
+                    ))
+                    conn.commit()
+                    logging.info(f"Stored failed evidence record for {video_url}")
+            except Exception as e:
+                logging.error(f"Error storing failed evidence record: {e}")
+
             return jsonify({
                 'success': False,
-                'error': 'Failed to process video'
+                'error': 'Failed to process video',
+                'details': 'The video file may be corrupted or in an unsupported format'
             }), 500
 
         # Analyze drowsiness
@@ -913,7 +1002,7 @@ def process_video():
                     'yawn_percentage': analysis_result.get('details', {}).get('yawn_percentage', 0),
                     'eye_closed_frames': detection_results.get('eye_closed_frames', 0),
                     'eye_closed_percentage': analysis_result.get('details', {}).get('eye_closed_percentage', 0),
-                    
+
                     # Maximum duration (frames) of eye closure in seconds
                     'max_consecutive_eye_closed': detection_results.get('max_consecutive_eye_closed', 0),
                     'normal_state_frames': detection_results.get('normal_state_frames', 0),

@@ -157,7 +157,10 @@ def main():
                                 logging.info(f"Processing video for device: {evidence.get('deviceName')}")
                                 processing_success, detection_results = yolo_processor.process_video(video_url)
 
-                                if processing_success and detection_results:
+                                if not processing_success:
+                                    logging.error(f"Failed to process video for device: {evidence.get('deviceName')}")
+                                    data_manager.update_evidence_status(evidence_id, 'failed')
+                                elif processing_success and detection_results:
                                     # Add debug logging to check detection_results
                                     logging.debug(f"Detection results: {detection_results}")
 
@@ -222,7 +225,10 @@ def main():
                         logging.info(f"Processing pending evidence for device: {device_name}")
                         processing_success, detection_results = yolo_processor.process_video(video_url)
 
-                        if processing_success and detection_results:
+                        if not processing_success:
+                            logging.error(f"Failed to process pending video for device: {device_name}")
+                            data_manager.update_evidence_status(evidence_id, 'failed')
+                        elif processing_success and detection_results:
                             # Analyze drowsiness using the detection_results dictionary
                             analysis_result = analyze_drowsiness(detection_results)
 
