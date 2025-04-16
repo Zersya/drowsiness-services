@@ -21,6 +21,9 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+          # Ensure container has enough CPU and memory for worker threads
+          cpus: '4'
+          memory: 6G
     runtime: nvidia
     # Ensure proper signal handling
     init: true
