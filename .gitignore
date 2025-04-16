@@ -5,3 +5,4 @@
 *.pyc
 *.mp4
 .rules
+!jingyeong-best.pt
