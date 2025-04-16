@@ -1044,7 +1044,10 @@ def queue_worker():
     while not shutdown_flag.is_set():
         try:
             # Check if we have capacity to process more videos
-            if processing_pool._work_queue.qsize() < MAX_WORKERS:
+            active_tasks = processing_pool._work_queue.qsize()
+            logging.info(f"Queue worker check - Active tasks: {active_tasks}, Max workers: {MAX_WORKERS}")
+
+            if active_tasks < MAX_WORKERS:
                 # Get the next pending video from the queue
                 queue_item = db_manager.get_next_pending_video()
 
@@ -1052,6 +1055,8 @@ def queue_worker():
                     # Submit the video for processing
                     processing_pool.submit(process_video_task, queue_item)
                     logging.info(f"Submitted video for processing: {queue_item['id']}")
+                else:
+                    logging.info("No pending videos in queue")
 
             # Wait before checking the queue again
             time.sleep(QUEUE_CHECK_INTERVAL)
@@ -1063,8 +1068,11 @@ def queue_worker():
     logging.info("Queue worker thread shutting down")
 
 # Start the queue worker thread
-queue_worker_thread = threading.Thread(target=queue_worker, daemon=True)
+# In Docker, daemon threads can be problematic, so we use a non-daemon thread
+# and ensure proper cleanup on shutdown
+queue_worker_thread = threading.Thread(target=queue_worker, daemon=False)
 queue_worker_thread.start()
+logging.info(f"Queue worker thread started with ID: {queue_worker_thread.ident}")
 
 
 # API Endpoints
@@ -1267,17 +1275,34 @@ def get_result(evidence_id):
         }), 500
 
 
+# Signal handler for graceful shutdown
+def signal_handler(sig, frame):
+    logging.info(f"Received signal {sig}, shutting down...")
+    # Signal the queue worker to stop
+    shutdown_flag.set()
+    # Wait for the queue worker to finish
+    logging.info("Waiting for queue worker to finish...")
+    queue_worker_thread.join(timeout=10)
+    # Shutdown the thread pool
+    logging.info("Shutting down thread pool...")
+    processing_pool.shutdown(wait=True, cancel_futures=False)
+    logging.info("Shutdown complete")
+    import sys
+    sys.exit(0)
+
 # Main function
 if __name__ == '__main__':
+    # Register signal handlers for graceful shutdown
+    import signal
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     logging.info(f"Starting Simplified Drowsiness Detection API on port {PORT}")
     try:
-        app.run(host='0.0.0.0', port=PORT, debug=False)
+        app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
     except KeyboardInterrupt:
-        logging.info("Shutting down...")
-        # Signal the queue worker to stop
-        shutdown_flag.set()
-        # Wait for the queue worker to finish
-        queue_worker_thread.join(timeout=5)
-        # Shutdown the thread pool
-        processing_pool.shutdown(wait=False)
-        logging.info("Shutdown complete")
+        # This should be handled by the signal handler, but just in case
+        signal_handler(signal.SIGINT, None)
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        signal_handler(signal.SIGTERM, None)

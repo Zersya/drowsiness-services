@@ -18,8 +18,14 @@ services:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     runtime: nvidia
+    # Ensure proper signal handling
+    init: true
+    stop_signal: SIGINT
+    stop_grace_period: 30s
 
 networks:
   proxy:

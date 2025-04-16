@@ -9,4 +9,20 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available()); pr
 
 echo "Starting application with ThreadPool support (MAX_WORKERS=$MAX_WORKERS)..."
 
-exec python simplify.py
+# Function to handle signals and pass them to the Python process
+function handle_signal() {
+    echo "Received signal $1, forwarding to Python process..."
+    kill -$1 $PYTHON_PID
+    wait $PYTHON_PID
+}
+
+# Set up signal handlers
+trap 'handle_signal SIGTERM' SIGTERM
+trap 'handle_signal SIGINT' SIGINT
+
+# Start Python process and store its PID
+python simplify.py &
+PYTHON_PID=$!
+
+# Wait for the Python process to finish
+wait $PYTHON_PID
