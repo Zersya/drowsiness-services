@@ -34,7 +34,8 @@ load_dotenv()
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "models/jingyeong-best.pt")
 POSE_MODEL_PATH = os.getenv("POSE_MODEL_PATH", "yolov8l-pose.pt")
 USE_CUDA = os.getenv('USE_CUDA', 'true').lower() == 'true'
-DB_PATH = "simplify_detection.db"
+# Use environment variable for database path to support Docker volumes
+DB_PATH = os.getenv("DB_PATH", "simplify_detection.db")
 PORT = int(os.getenv('SIMPLIFY_PORT', 8002))
 MAX_WORKERS = int(os.getenv('MAX_WORKERS', 1))  # Maximum number of concurrent video processing workers
 QUEUE_CHECK_INTERVAL = int(os.getenv('QUEUE_CHECK_INTERVAL', 5))  # Seconds between queue checks

@@ -7,6 +7,13 @@ nvcc --version || echo "NVCC not found, but container will still run with CPU su
 
 python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A'); print('PyTorch version:', torch.__version__)"
 
+# Ensure data directories exist and have the right permissions
+mkdir -p /app/data
+mkdir -p /app/logs
+chmod -R 777 /app/data
+chmod -R 777 /app/logs
+echo "Data directories created and permissions set"
+
 echo "Starting application with ThreadPool support (MAX_WORKERS=$MAX_WORKERS)..."
 
 # Set environment variables to optimize for worker threads

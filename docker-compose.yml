@@ -9,7 +9,8 @@ services:
     volumes:
       - ./models:/app/models
       - ./logs:/app/logs
-      - ./data:/app/data
+      - simplify_db_data:/app/data
+      - ./data:/app/data_host
     ports:
       - 8002:8002
     networks:
@@ -21,14 +22,16 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-          # Ensure container has enough CPU and memory for worker threads
           cpus: '4'
           memory: 6G
     runtime: nvidia
-    # Ensure proper signal handling
     init: true
     stop_signal: SIGINT
     stop_grace_period: 30s
+
+volumes:
+  simplify_db_data:
+    name: simplify_db_data
 
 networks:
   proxy:
