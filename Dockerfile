@@ -49,7 +49,7 @@ ENV POSE_MODEL_PATH=models/yolov8l-pose.pt
 # Enable CUDA support - will use CUDA 12.4 from the host if available
 ENV USE_CUDA=true
 # Use first GPU
-ENV CUDA_VISIBLE_DEVICES=0 
+ENV CUDA_VISIBLE_DEVICES=0
 ENV SIMPLIFY_PORT=8002
 # Configure ThreadPool settings
 # Number of concurrent video processing workers
@@ -71,15 +71,9 @@ VOLUME ["/app/models", "/app/logs", "/app/data"]
 # Set database path to the persistent volume
 ENV DB_PATH=/app/data/simplify_detection.db
 
-# Create a startup script to check CUDA compatibility and run the application
-RUN echo '#!/bin/bash\n\
-echo "Checking CUDA version..."\n\
-echo "Container is configured for CUDA 12.1, compatible with host CUDA 12.4"\n\
-nvcc --version || echo "NVCC not found, but container will still run with CPU support"\n\
-python -c "import torch; print(\'CUDA available:\', torch.cuda.is_available()); print(\'CUDA version:\', torch.version.cuda if torch.cuda.is_available() else \'N/A\'); print(\'PyTorch version:\', torch.__version__)"\n\
-echo "Starting application with ThreadPool support (MAX_WORKERS=$MAX_WORKERS)..."\n\
-exec python simplify.py' > /app/start.sh && \
-    chmod +x /app/start.sh
+# Copy the startup script
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 # Run the startup script which will then run the application with ThreadPool support
 CMD ["/app/start.sh"]
