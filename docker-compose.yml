@@ -1,0 +1,26 @@
+services:
+  simplify-drowsiness-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: simplify-drowsiness-detector
+    container_name: simplify-drowsiness-detector
+    restart: unless-stopped
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./data:/app/data
+    ports:
+      - 8002:8002
+    networks:
+      - proxy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    runtime: nvidia
+
+networks:
+  proxy:
+    external: true
