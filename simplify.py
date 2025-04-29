@@ -89,6 +89,16 @@ class DatabaseManager:
                     )
                 ''')
 
+                # Create webhooks table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS webhooks (
+                        id INTEGER PRIMARY KEY,
+                        url TEXT NOT NULL,
+                        is_enabled BOOLEAN DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
                 conn.commit()
                 logging.info("Database initialized successfully")
         except sqlite3.Error as e:
@@ -269,6 +279,83 @@ class DatabaseManager:
                 return [dict(row) for row in results]
         except sqlite3.Error as e:
             logging.error(f"Error getting all evidence results: {e}")
+            return []
+
+    def add_webhook(self, url):
+        """Add a new webhook URL."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Check if this URL already exists
+                cursor = conn.execute(
+                    'SELECT id FROM webhooks WHERE url = ?',
+                    (url,)
+                )
+                existing = cursor.fetchone()
+
+                if existing:
+                    # If it exists but is disabled, enable it
+                    conn.execute(
+                        'UPDATE webhooks SET is_enabled = 1 WHERE id = ?',
+                        (existing[0],)
+                    )
+                    conn.commit()
+                    logging.info(f"Re-enabled existing webhook: {url}, ID: {existing[0]}")
+                    return existing[0]
+
+                # Add new webhook
+                cursor = conn.execute(
+                    'INSERT INTO webhooks (url, is_enabled) VALUES (?, ?)',
+                    (url, 1)
+                )
+                webhook_id = cursor.lastrowid
+                conn.commit()
+                logging.info(f"Added new webhook: {url}, ID: {webhook_id}")
+                return webhook_id
+        except sqlite3.Error as e:
+            logging.error(f"Error adding webhook: {e}")
+            return None
+
+    def delete_webhook(self, webhook_id):
+        """Delete a webhook by ID."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    'DELETE FROM webhooks WHERE id = ?',
+                    (webhook_id,)
+                )
+                conn.commit()
+                logging.info(f"Deleted webhook with ID: {webhook_id}")
+                return True
+        except sqlite3.Error as e:
+            logging.error(f"Error deleting webhook: {e}")
+            return False
+
+    def get_all_webhooks(self):
+        """Get all registered webhooks."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT * FROM webhooks ORDER BY created_at DESC'
+                )
+                results = cursor.fetchall()
+                return [dict(row) for row in results]
+        except sqlite3.Error as e:
+            logging.error(f"Error getting all webhooks: {e}")
+            return []
+
+    def get_active_webhooks(self):
+        """Get all active webhooks."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT * FROM webhooks WHERE is_enabled = 1'
+                )
+                results = cursor.fetchall()
+                return [dict(row) for row in results]
+        except sqlite3.Error as e:
+            logging.error(f"Error getting active webhooks: {e}")
             return []
 
 
@@ -974,6 +1061,49 @@ logging.info(f"Created ThreadPoolExecutor with {MAX_WORKERS} workers")
 # Flag to control the background worker
 shutdown_flag = threading.Event()
 
+def send_webhook_notification(queue_id, evidence_id, status, video_url, results=None):
+    """Send webhook notifications to all registered webhook URLs."""
+    active_webhooks = db_manager.get_active_webhooks()
+    if not active_webhooks:
+        logging.info("No active webhooks found, skipping notifications")
+        return
+
+    # Prepare webhook payload
+    payload = {
+        'queue_id': queue_id,
+        'evidence_id': evidence_id,
+        'status': status,
+        'video_url': video_url,
+        'timestamp': datetime.datetime.now().isoformat()
+    }
+
+    # Add results if available
+    if results:
+        payload['results'] = results
+
+    # Send to all active webhooks
+    for webhook in active_webhooks:
+        try:
+            webhook_url = webhook['url']
+            logging.info(f"Sending webhook notification to {webhook_url}")
+
+            response = requests.post(
+                webhook_url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=10  # 10 second timeout
+            )
+
+            if response.status_code >= 200 and response.status_code < 300:
+                logging.info(f"Webhook notification sent successfully to {webhook_url}")
+            else:
+                logging.warning(f"Webhook notification failed: {webhook_url}, Status: {response.status_code}, Response: {response.text}")
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error sending webhook notification to {webhook['url']}: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error sending webhook notification: {e}")
+
 def process_video_task(queue_item):
     """Process a video from the queue."""
     queue_id = queue_item['id']
@@ -1018,6 +1148,15 @@ def process_video_task(queue_item):
                     ))
                     conn.commit()
                     logging.info(f"Stored failed evidence record for {video_url}")
+
+                # Send webhook notification for failed processing
+                send_webhook_notification(
+                    queue_id=queue_id,
+                    evidence_id=None,
+                    status='failed',
+                    video_url=video_url,
+                    results={'error': 'Failed to process video'}
+                )
             except Exception as e:
                 logging.error(f"Error storing failed evidence record: {e}")
 
@@ -1040,9 +1179,29 @@ def process_video_task(queue_item):
 
         logging.info(f"Completed processing video from queue: {queue_id}, Evidence ID: {evidence_id}")
 
+        # Send webhook notification for successful processing
+        # Get the full evidence result to include in the webhook
+        evidence_result = db_manager.get_evidence_result(evidence_id)
+        send_webhook_notification(
+            queue_id=queue_id,
+            evidence_id=evidence_id,
+            status='completed',
+            video_url=video_url,
+            results=evidence_result
+        )
+
     except Exception as e:
         logging.error(f"Error processing video from queue: {e}")
         db_manager.update_queue_status(queue_id, 'failed')
+
+        # Send webhook notification for error
+        send_webhook_notification(
+            queue_id=queue_id,
+            evidence_id=None,
+            status='failed',
+            video_url=video_url,
+            results={'error': str(e)}
+        )
 
 def queue_worker():
     """Background worker to process videos from the queue."""
@@ -1107,7 +1266,8 @@ def index():
             '/api/queue/<id>',       # Check the status of a queued video
             '/api/queue',            # Get queue statistics
             '/api/results',          # Get all processed videos
-            '/api/result/<id>'       # Get details for a specific processed video
+            '/api/result/<id>',      # Get details for a specific processed video
+            '/api/webhook',          # Manage webhooks (GET, POST, DELETE)
         ]
     })
 
@@ -1309,6 +1469,92 @@ def get_result(evidence_id):
 
     except Exception as e:
         logging.error(f"Error getting result: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/webhook', methods=['GET', 'POST', 'DELETE'])
+def manage_webhooks():
+    """Manage webhooks for video processing notifications."""
+    try:
+        # GET: List all webhooks
+        if request.method == 'GET':
+            webhooks = db_manager.get_all_webhooks()
+            return jsonify({
+                'success': True,
+                'data': webhooks
+            })
+
+        # POST: Add a new webhook
+        elif request.method == 'POST':
+            data = request.get_json()
+            if not data or 'url' not in data:
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing url in request'
+                }), 400
+
+            webhook_url = data['url']
+
+            # Validate URL format
+            try:
+                parsed_url = requests.utils.urlparse(webhook_url)
+                if not all([parsed_url.scheme, parsed_url.netloc]):
+                    return jsonify({
+                        'success': False,
+                        'error': 'Invalid URL format'
+                    }), 400
+            except Exception:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid URL format'
+                }), 400
+
+            # Add webhook to database
+            webhook_id = db_manager.add_webhook(webhook_url)
+            if not webhook_id:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to add webhook'
+                }), 500
+
+            return jsonify({
+                'success': True,
+                'message': 'Webhook added successfully',
+                'data': {
+                    'webhook_id': webhook_id,
+                    'url': webhook_url
+                }
+            })
+
+        # DELETE: Remove a webhook
+        elif request.method == 'DELETE':
+            data = request.get_json()
+            if not data or 'webhook_id' not in data:
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing webhook_id in request'
+                }), 400
+
+            webhook_id = data['webhook_id']
+
+            # Delete webhook from database
+            success = db_manager.delete_webhook(webhook_id)
+            if not success:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to delete webhook with ID {webhook_id}'
+                }), 500
+
+            return jsonify({
+                'success': True,
+                'message': f'Webhook with ID {webhook_id} deleted successfully'
+            })
+
+    except Exception as e:
+        logging.error(f"Error managing webhooks: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
