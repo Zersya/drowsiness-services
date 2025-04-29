@@ -34,7 +34,8 @@ load_dotenv()
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "models/jingyeong-best.pt")
 POSE_MODEL_PATH = os.getenv("POSE_MODEL_PATH", "yolov8l-pose.pt")
 USE_CUDA = os.getenv('USE_CUDA', 'true').lower() == 'true'
-DB_PATH = "simplify_detection.db"
+# Use environment variable for database path to support Docker volumes
+DB_PATH = os.getenv("DB_PATH", "simplify_detection.db")
 PORT = int(os.getenv('SIMPLIFY_PORT', 8002))
 MAX_WORKERS = int(os.getenv('MAX_WORKERS', 1))  # Maximum number of concurrent video processing workers
 QUEUE_CHECK_INTERVAL = int(os.getenv('QUEUE_CHECK_INTERVAL', 5))  # Seconds between queue checks
@@ -962,7 +963,13 @@ yolo_processor = YoloProcessor()
 drowsiness_analyzer = create_analyzer(analyzer_type="rate")
 
 # Create a thread pool for processing videos
-processing_pool = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+# Use thread_name_prefix to make debugging easier
+# Set max_workers explicitly to ensure all workers are created
+processing_pool = ThreadPoolExecutor(
+    max_workers=MAX_WORKERS,
+    thread_name_prefix="VideoProcessor"
+)
+logging.info(f"Created ThreadPoolExecutor with {MAX_WORKERS} workers")
 
 # Flag to control the background worker
 shutdown_flag = threading.Event()
@@ -1043,15 +1050,33 @@ def queue_worker():
 
     while not shutdown_flag.is_set():
         try:
-            # Check if we have capacity to process more videos
-            if processing_pool._work_queue.qsize() < MAX_WORKERS:
-                # Get the next pending video from the queue
-                queue_item = db_manager.get_next_pending_video()
+            # Get current processing status
+            stats = db_manager.get_queue_stats()
+            processing_count = stats.get('processing', 0)
+            pending_count = stats.get('pending', 0)
 
-                if queue_item:
-                    # Submit the video for processing
-                    processing_pool.submit(process_video_task, queue_item)
-                    logging.info(f"Submitted video for processing: {queue_item['id']}")
+            # Calculate how many more tasks we can submit
+            available_workers = MAX_WORKERS - processing_count
+
+            logging.info(f"Queue worker check - Processing: {processing_count}, Pending: {pending_count}, Available workers: {available_workers}, Max workers: {MAX_WORKERS}")
+
+            # If we have available workers and pending tasks, submit them
+            if available_workers > 0 and pending_count > 0:
+                # Submit up to available_workers tasks
+                for _ in range(min(available_workers, pending_count)):
+                    queue_item = db_manager.get_next_pending_video()
+                    if queue_item:
+                        # Submit the video for processing
+                        processing_pool.submit(process_video_task, queue_item)
+                        logging.info(f"Submitted video for processing: {queue_item['id']}")
+                    else:
+                        # This shouldn't happen, but just in case
+                        logging.warning("Expected pending video but none found")
+                        break
+            elif pending_count == 0:
+                logging.info("No pending videos in queue")
+            else:
+                logging.info(f"All workers busy ({processing_count}/{MAX_WORKERS})")
 
             # Wait before checking the queue again
             time.sleep(QUEUE_CHECK_INTERVAL)
@@ -1063,8 +1088,11 @@ def queue_worker():
     logging.info("Queue worker thread shutting down")
 
 # Start the queue worker thread
-queue_worker_thread = threading.Thread(target=queue_worker, daemon=True)
+# In Docker, daemon threads can be problematic, so we use a non-daemon thread
+# and ensure proper cleanup on shutdown
+queue_worker_thread = threading.Thread(target=queue_worker, daemon=False)
 queue_worker_thread.start()
+logging.info(f"Queue worker thread started with ID: {queue_worker_thread.ident}")
 
 
 # API Endpoints
@@ -1197,12 +1225,32 @@ def get_queue_stats():
         # Get queue stats
         stats = db_manager.get_queue_stats()
 
+        # Get thread pool information
+        active_workers = min(MAX_WORKERS, stats.get('processing', 0))
+        pending_tasks = stats.get('pending', 0)
+        completed_tasks = stats.get('completed', 0)
+        failed_tasks = stats.get('failed', 0)
+
+        # Calculate utilization percentage
+        worker_utilization = (active_workers / MAX_WORKERS) * 100 if MAX_WORKERS > 0 else 0
+
         return jsonify({
             'success': True,
             'data': {
                 'stats': stats,
-                'worker_threads': MAX_WORKERS,
-                'active_tasks': processing_pool._work_queue.qsize()
+                'worker_threads': {
+                    'max': MAX_WORKERS,
+                    'active': active_workers,
+                    'utilization_percent': worker_utilization
+                },
+                'tasks': {
+                    'pending': pending_tasks,
+                    'processing': stats.get('processing', 0),
+                    'completed': completed_tasks,
+                    'failed': failed_tasks,
+                    'total': pending_tasks + stats.get('processing', 0) + completed_tasks + failed_tasks
+                },
+                'queue_check_interval': QUEUE_CHECK_INTERVAL
             }
         })
 
@@ -1267,17 +1315,34 @@ def get_result(evidence_id):
         }), 500
 
 
+# Signal handler for graceful shutdown
+def signal_handler(sig, _):
+    logging.info(f"Received signal {sig}, shutting down...")
+    # Signal the queue worker to stop
+    shutdown_flag.set()
+    # Wait for the queue worker to finish
+    logging.info("Waiting for queue worker to finish...")
+    queue_worker_thread.join(timeout=10)
+    # Shutdown the thread pool
+    logging.info("Shutting down thread pool...")
+    processing_pool.shutdown(wait=True, cancel_futures=False)
+    logging.info("Shutdown complete")
+    import sys
+    sys.exit(0)
+
 # Main function
 if __name__ == '__main__':
+    # Register signal handlers for graceful shutdown
+    import signal
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     logging.info(f"Starting Simplified Drowsiness Detection API on port {PORT}")
     try:
-        app.run(host='0.0.0.0', port=PORT, debug=False)
+        app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
     except KeyboardInterrupt:
-        logging.info("Shutting down...")
-        # Signal the queue worker to stop
-        shutdown_flag.set()
-        # Wait for the queue worker to finish
-        queue_worker_thread.join(timeout=5)
-        # Shutdown the thread pool
-        processing_pool.shutdown(wait=False)
-        logging.info("Shutdown complete")
+        # This should be handled by the signal handler, but just in case
+        signal_handler(signal.SIGINT, None)
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        signal_handler(signal.SIGTERM, None)

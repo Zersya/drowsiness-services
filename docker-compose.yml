@@ -9,7 +9,8 @@ services:
     volumes:
       - ./models:/app/models
       - ./logs:/app/logs
-      - ./data:/app/data
+      - simplify_db_data:/app/data
+      - ./data:/app/data_host
     ports:
       - 8002:8002
     networks:
@@ -18,8 +19,19 @@ services:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+          cpus: '4'
+          memory: 6G
     runtime: nvidia
+    init: true
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+
+volumes:
+  simplify_db_data:
+    name: simplify_db_data
 
 networks:
   proxy:

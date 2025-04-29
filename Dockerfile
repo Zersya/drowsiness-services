@@ -58,6 +58,9 @@ ENV MAX_WORKERS=4
 # Seconds between queue checks
 ENV QUEUE_CHECK_INTERVAL=5
 
+# Ensure proper signal handling in Docker
+ENV PYTHONDONTWRITEBYTECODE=1
+
 # Ensure Python output is unbuffered for better logging
 ENV PYTHONUNBUFFERED=1
 
