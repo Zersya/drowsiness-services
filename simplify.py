@@ -203,6 +203,50 @@ class DatabaseManager:
             logging.error(f"Error getting queue stats: {e}")
             return {}
 
+    def get_processing_time_stats(self):
+        """Calculate average processing time and queue wait time."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+
+                # Calculate average processing time from completed evidence results
+                cursor = conn.execute('''
+                    SELECT AVG(process_time) as avg_processing_time
+                    FROM evidence_results
+                    WHERE processing_status = 'processed'
+                    AND process_time IS NOT NULL
+                ''')
+                result = cursor.fetchone()
+                avg_processing_time = result['avg_processing_time'] if result and result['avg_processing_time'] is not None else 0
+
+                # Calculate average queue wait time
+                # This is more complex as we need to join tables and calculate time differences
+                cursor = conn.execute('''
+                    SELECT
+                        AVG(
+                            (julianday(er.created_at) - julianday(pq.created_at)) * 24 * 60 * 60
+                        ) as avg_queue_wait_time
+                    FROM
+                        evidence_results er
+                    JOIN
+                        processing_queue pq ON er.video_url = pq.video_url
+                    WHERE
+                        pq.status = 'completed'
+                ''')
+                result = cursor.fetchone()
+                avg_queue_wait_time = result['avg_queue_wait_time'] if result and result['avg_queue_wait_time'] is not None else 0
+
+                return {
+                    'avg_processing_time': avg_processing_time,
+                    'avg_queue_wait_time': avg_queue_wait_time
+                }
+        except sqlite3.Error as e:
+            logging.error(f"Error calculating processing time stats: {e}")
+            return {
+                'avg_processing_time': 0,
+                'avg_queue_wait_time': 0
+            }
+
     def store_evidence_result(self, video_url, detection_results, analysis_result, process_time, head_pose=None):
         """Store evidence result in the database."""
         try:
@@ -1394,6 +1438,9 @@ def get_queue_stats():
         # Calculate utilization percentage
         worker_utilization = (active_workers / MAX_WORKERS) * 100 if MAX_WORKERS > 0 else 0
 
+        # Get processing time statistics
+        time_stats = db_manager.get_processing_time_stats()
+
         return jsonify({
             'success': True,
             'data': {
@@ -1409,6 +1456,10 @@ def get_queue_stats():
                     'completed': completed_tasks,
                     'failed': failed_tasks,
                     'total': pending_tasks + stats.get('processing', 0) + completed_tasks + failed_tasks
+                },
+                'time_metrics': {
+                    'average_processing_task_time': round(time_stats['avg_processing_time'], 2),
+                    'average_queue_wait_time': round(time_stats['avg_queue_wait_time'], 2)
                 },
                 'queue_check_interval': QUEUE_CHECK_INTERVAL
             }
