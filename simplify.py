@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 from abc import ABC, abstractmethod
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import requests
 from dotenv import load_dotenv
@@ -603,25 +603,25 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         self.minimum_eye_closed_threshold = 3
         self.normal_state_ratio_threshold = 5
         self.minimum_frames_for_analysis = 10
-        
+
         # Add new parameters from drowsiness_analyzer.py
         # --- Score Calculation Parameters ---
         self.perclos_scale = 1.2
         self.duration_scale = 1.8
         self.yawn_rate_scale = 1.5
         self.score_cap = 2.5
-        
+
         # --- Weights (Balanced) ---
         self.eye_metric_weight = 0.7  # More weight to eye metrics
         self.yawn_metric_weight = 0.3  # Less weight to yawn metrics
-        
+
         # --- Non-Linear Damping Parameters ---
         self.damping_base_factor = 0.8
         self.damping_power = 2.5
-        
+
         # --- Decision Making ---
         self.drowsiness_decision_threshold = 0.55
-        
+
         # --- Extreme Thresholds for Conditional Overrides ---
         self.extreme_perclos_threshold = 45.0
         self.extreme_duration_threshold = 1.5
@@ -815,7 +815,7 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         # For backward compatibility, check head pose override
         # Check if head is in a distracted position (either turned or down)
         is_head_distracted = is_head_turned or is_head_down
-        
+
         if is_head_distracted and is_drowsy:
             is_drowsy = False
             reason = 'head_pose_override'
@@ -1436,6 +1436,7 @@ def index():
             '/api/results',          # Get all processed videos
             '/api/result/<id>',      # Get details for a specific processed video
             '/api/webhook',          # Manage webhooks (GET, POST, DELETE)
+            '/api/download/db',      # Download the SQLite database file
         ]
     })
 
@@ -1730,6 +1731,41 @@ def manage_webhooks():
 
     except Exception as e:
         logging.error(f"Error managing webhooks: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/download/db', methods=['GET'])
+def download_database():
+    """Download the SQLite database file."""
+    try:
+        # Check if the database file exists
+        if not os.path.exists(DB_PATH):
+            return jsonify({
+                'success': False,
+                'error': f'Database file not found at {DB_PATH}'
+            }), 404
+
+        # Get the file size for logging
+        file_size = os.path.getsize(DB_PATH)
+        logging.info(f"Serving database file: {DB_PATH} (size: {file_size / 1024:.2f} KB)")
+
+        # Generate a filename for the download
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        download_name = f"simplify_detection_{timestamp}.db"
+
+        # Return the file as an attachment
+        return send_file(
+            DB_PATH,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype='application/octet-stream'
+        )
+
+    except Exception as e:
+        logging.error(f"Error downloading database file: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
