@@ -247,6 +247,132 @@ class DatabaseManager:
                 'avg_queue_wait_time': 0
             }
 
+    def get_precision_stats(self):
+        """Calculate precision metrics for drowsiness detection."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+
+                # Get the stats for processed videos
+                cursor = conn.execute('''
+                    SELECT
+                        COUNT(*) as total_events,
+                        COUNT(DISTINCT video_url) as unique_videos,
+                        COALESCE(SUM(CASE WHEN is_drowsy = 1 THEN 1 ELSE 0 END), 0) as drowsy_events,
+                        COALESCE(SUM(CASE WHEN processing_status = 'processed' THEN 1 ELSE 0 END), 0) as processed_events,
+                        COALESCE(SUM(CASE WHEN processing_status = 'pending' THEN 1 ELSE 0 END), 0) as pending_events,
+                        COALESCE(SUM(CASE WHEN processing_status = 'failed' THEN 1 ELSE 0 END), 0) as failed_events
+                    FROM evidence_results
+                ''')
+                stats = dict(cursor.fetchone())
+
+                # Get the JSON details for all processed videos to analyze precision
+                cursor = conn.execute('''
+                    SELECT
+                        id,
+                        is_drowsy,
+                        details,
+                        yawn_frames,
+                        eye_closed_frames,
+                        normal_state_frames,
+                        total_frames
+                    FROM evidence_results
+                    WHERE processing_status = 'processed'
+                ''')
+
+                results = cursor.fetchall()
+
+                # Initialize counters for precision metrics
+                true_positives = 0
+                false_positives = 0
+                true_negatives = 0
+                false_negatives = 0
+
+                # Analyze each result to determine precision metrics
+                for row in results:
+                    # Get the ground truth (is_drowsy from the database)
+                    is_drowsy_db = bool(row['is_drowsy'])
+
+                    # Parse the details JSON to get the analysis result
+                    details = json.loads(row['details']) if row['details'] else {}
+                    analysis_result = details.get('analysis_result', {})
+
+                    # Get the predicted drowsiness from the analysis result
+                    is_drowsy_predicted = analysis_result.get('is_drowsy', False)
+
+                    # Calculate metrics based on ground truth vs prediction
+                    if is_drowsy_db and is_drowsy_predicted:
+                        true_positives += 1
+                    elif is_drowsy_db and not is_drowsy_predicted:
+                        false_negatives += 1
+                    elif not is_drowsy_db and is_drowsy_predicted:
+                        false_positives += 1
+                    elif not is_drowsy_db and not is_drowsy_predicted:
+                        true_negatives += 1
+
+                # Calculate precision metrics
+                total_predictions = true_positives + false_positives + true_negatives + false_negatives
+
+                # Initialize metrics with default values
+                precision_metrics = {
+                    'true_positives': true_positives,
+                    'false_positives': false_positives,
+                    'true_negatives': true_negatives,
+                    'false_negatives': false_negatives,
+                    'accuracy': 0.0,
+                    'precision': 0.0,
+                    'sensitivity': 0.0,  # Also known as recall
+                    'specificity': 0.0,
+                    'f1_score': 0.0
+                }
+
+                # Calculate metrics if we have predictions
+                if total_predictions > 0:
+                    # Accuracy: (TP + TN) / (TP + TN + FP + FN)
+                    precision_metrics['accuracy'] = ((true_positives + true_negatives) / total_predictions) * 100
+
+                    # Precision: TP / (TP + FP)
+                    if (true_positives + false_positives) > 0:
+                        precision_metrics['precision'] = (true_positives / (true_positives + false_positives)) * 100
+
+                    # Sensitivity/Recall: TP / (TP + FN)
+                    if (true_positives + false_negatives) > 0:
+                        precision_metrics['sensitivity'] = (true_positives / (true_positives + false_negatives)) * 100
+
+                    # Specificity: TN / (TN + FP)
+                    if (true_negatives + false_positives) > 0:
+                        precision_metrics['specificity'] = (true_negatives / (true_negatives + false_positives)) * 100
+
+                    # F1 Score: 2 * (Precision * Recall) / (Precision + Recall)
+                    if precision_metrics['precision'] + precision_metrics['sensitivity'] > 0:
+                        precision_metrics['f1_score'] = (2 * precision_metrics['precision'] * precision_metrics['sensitivity']) / (precision_metrics['precision'] + precision_metrics['sensitivity'])
+
+                # Combine basic stats with precision metrics
+                stats.update(precision_metrics)
+
+                return stats
+
+        except sqlite3.Error as e:
+            logging.error(f"Error calculating precision stats: {e}")
+            return {
+                'error': str(e),
+                'total_events': 0,
+                'unique_videos': 0,
+                'drowsy_events': 0,
+                'processed_events': 0,
+                'pending_events': 0,
+                'failed_events': 0,
+                'true_positives': 0,
+                'false_positives': 0,
+                'true_negatives': 0,
+                'false_negatives': 0,
+                'accuracy': 0.0,
+                'precision': 0.0,
+                'sensitivity': 0.0,
+                'specificity': 0.0,
+                'f1_score': 0.0
+            }
+
     def store_evidence_result(self, video_url, detection_results, analysis_result, process_time, head_pose=None):
         """Store evidence result in the database."""
         try:
@@ -1304,13 +1430,14 @@ def index():
     """API root endpoint."""
     return jsonify({
         'message': 'Simplified Drowsiness Detection API',
-        'version': '1.1.0',
+        'version': '1.1.1',
         'endpoints': [
             '/api/process',          # Add a video to the processing queue
             '/api/queue/<id>',       # Check the status of a queued video
             '/api/queue',            # Get queue statistics
             '/api/results',          # Get all processed videos
             '/api/result/<id>',      # Get details for a specific processed video
+            '/api/stats/precision',  # Get precision statistics for drowsiness detection
             '/api/webhook',          # Manage webhooks (GET, POST, DELETE)
         ]
     })
@@ -1520,6 +1647,31 @@ def get_result(evidence_id):
 
     except Exception as e:
         logging.error(f"Error getting result: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/stats/precision', methods=['GET'])
+def get_stats_precision():
+    """Get precision statistics for drowsiness detection."""
+    try:
+        # Get precision stats
+        stats = db_manager.get_precision_stats()
+
+        # Round floating point values for better readability
+        for key in stats:
+            if isinstance(stats[key], float):
+                stats[key] = round(stats[key], 2)
+
+        return jsonify({
+            'success': True,
+            'data': stats
+        })
+
+    except Exception as e:
+        logging.error(f"Error getting precision stats: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
