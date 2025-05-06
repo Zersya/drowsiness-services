@@ -100,10 +100,67 @@ class DatabaseManager:
                     )
                 ''')
 
+                # Check if evidence_id column exists in processing_queue table
+                cursor.execute("PRAGMA table_info(processing_queue)")
+                columns = [column[1] for column in cursor.fetchall()]
+
+                # Add evidence_id column if it doesn't exist
+                if 'evidence_id' not in columns:
+                    logging.info("Adding evidence_id column to processing_queue table")
+                    cursor.execute('''
+                        ALTER TABLE processing_queue
+                        ADD COLUMN evidence_id INTEGER
+                    ''')
+                    logging.info("Added evidence_id column to processing_queue table")
+
+                    # Populate evidence_id for existing completed queue items
+                    self._populate_evidence_ids()
+
                 conn.commit()
                 logging.info("Database initialized successfully")
         except sqlite3.Error as e:
             logging.error(f"Database initialization error: {e}")
+
+    def _populate_evidence_ids(self):
+        """Populate evidence_id for existing queue items that don't have it."""
+        try:
+            logging.info("Populating evidence_id for existing queue items")
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+
+                # Get all completed queue items without evidence_id
+                cursor = conn.execute('''
+                    SELECT id, video_url
+                    FROM processing_queue
+                    WHERE status = 'completed' AND (evidence_id IS NULL OR evidence_id = 0)
+                ''')
+                queue_items = cursor.fetchall()
+
+                updated_count = 0
+                for item in queue_items:
+                    # Find the corresponding evidence result
+                    cursor = conn.execute('''
+                        SELECT id
+                        FROM evidence_results
+                        WHERE video_url = ?
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    ''', (item['video_url'],))
+                    evidence = cursor.fetchone()
+
+                    if evidence:
+                        # Update the queue item with the evidence_id
+                        conn.execute('''
+                            UPDATE processing_queue
+                            SET evidence_id = ?
+                            WHERE id = ?
+                        ''', (evidence['id'], item['id']))
+                        updated_count += 1
+
+                conn.commit()
+                logging.info(f"Updated evidence_id for {updated_count} existing queue items")
+        except sqlite3.Error as e:
+            logging.error(f"Error populating evidence_ids: {e}")
 
     def add_to_queue(self, video_url):
         """Add a video URL to the processing queue."""
@@ -149,13 +206,44 @@ class DatabaseManager:
             logging.error(f"Error updating queue status: {e}")
             return False
 
+    def update_queue_evidence_id(self, queue_id, evidence_id):
+        """Update the evidence_id of a queued item."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    'UPDATE processing_queue SET evidence_id = ? WHERE id = ?',
+                    (evidence_id, queue_id)
+                )
+                conn.commit()
+                logging.info(f"Updated queue item {queue_id} evidence_id to {evidence_id}")
+                return True
+        except sqlite3.Error as e:
+            logging.error(f"Error updating queue evidence_id: {e}")
+            return False
+
+    def update_queue_status_range(self, start_id, end_id, status):
+        """Update the status of a range of queued items."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    'UPDATE processing_queue SET status = ? WHERE id >= ? AND id <= ?',
+                    (status, start_id, end_id)
+                )
+                conn.commit()
+                affected_rows = conn.total_changes
+                logging.info(f"Updated {affected_rows} queue items from ID {start_id} to {end_id} with status {status}")
+                return affected_rows
+        except sqlite3.Error as e:
+            logging.error(f"Error updating queue status range: {e}")
+            return 0
+
     def get_queue_status(self, queue_id):
         """Get the status of a queued item."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
-                    'SELECT id, video_url, status, created_at FROM processing_queue WHERE id = ?',
+                    'SELECT id, video_url, status, evidence_id, created_at FROM processing_queue WHERE id = ?',
                     (queue_id,)
                 )
                 result = cursor.fetchone()
@@ -166,13 +254,28 @@ class DatabaseManager:
             logging.error(f"Error getting queue status: {e}")
             return None
 
+    def get_queue_items_by_evidence_id(self, evidence_id):
+        """Get all queue items that reference a specific evidence result."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT id, video_url, status, evidence_id, created_at FROM processing_queue WHERE evidence_id = ?',
+                    (evidence_id,)
+                )
+                results = cursor.fetchall()
+                return [dict(row) for row in results]
+        except sqlite3.Error as e:
+            logging.error(f"Error getting queue items by evidence_id: {e}")
+            return []
+
     def get_next_pending_video(self):
         """Get the next pending video from the queue."""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.execute(
-                    'SELECT id, video_url FROM processing_queue WHERE status = "pending" ORDER BY created_at ASC LIMIT 1'
+                    'SELECT id, video_url, evidence_id FROM processing_queue WHERE status = "pending" ORDER BY created_at ASC LIMIT 1'
                 )
                 result = cursor.fetchone()
                 if result:
@@ -299,6 +402,65 @@ class DatabaseManager:
             logging.error(f"Error storing evidence result: {e}")
             return None
 
+    def update_evidence_result(self, evidence_id, video_url, detection_results, analysis_result, process_time, head_pose=None):
+        """Update an existing evidence result in the database."""
+        try:
+            is_drowsy = analysis_result.get('is_drowsy')
+            confidence = analysis_result.get('confidence', 0.0)
+
+            # Extract head pose information
+            is_head_turned = False
+            is_head_down = False
+            if head_pose:
+                is_head_turned = head_pose.get('head_turned', False)
+                is_head_down = head_pose.get('head_down', False)
+
+            # Combine all details for storage
+            details = {
+                'detection_results': detection_results,
+                'analysis_result': analysis_result,
+                'head_pose': head_pose,
+                'reprocessed_at': datetime.datetime.now().isoformat()
+            }
+
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute('''
+                    UPDATE evidence_results SET
+                        process_time = ?,
+                        yawn_frames = ?,
+                        eye_closed_frames = ?,
+                        max_consecutive_eye_closed = ?,
+                        normal_state_frames = ?,
+                        total_frames = ?,
+                        is_drowsy = ?,
+                        confidence = ?,
+                        is_head_turned = ?,
+                        is_head_down = ?,
+                        processing_status = ?,
+                        details = ?
+                    WHERE id = ?
+                ''', (
+                    process_time,
+                    detection_results.get('yawn_frames', 0),
+                    detection_results.get('eye_closed_frames', 0),
+                    detection_results.get('max_consecutive_eye_closed', 0),
+                    detection_results.get('normal_state_frames', 0),
+                    detection_results.get('total_frames', 0),
+                    is_drowsy,
+                    confidence,
+                    is_head_turned,
+                    is_head_down,
+                    'processed',
+                    json.dumps(details),
+                    evidence_id
+                ))
+                conn.commit()
+                logging.info(f"Updated evidence result for {video_url}, ID: {evidence_id}")
+                return evidence_id
+        except sqlite3.Error as e:
+            logging.error(f"Error updating evidence result: {e}")
+            return None
+
     def get_evidence_result(self, evidence_id):
         """Get evidence result by ID."""
         try:
@@ -309,6 +471,21 @@ class DatabaseManager:
                 return dict(result) if result else None
         except sqlite3.Error as e:
             logging.error(f"Error getting evidence result: {e}")
+            return None
+
+    def get_evidence_result_by_video_url(self, video_url):
+        """Get the most recent evidence result for a specific video URL."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT * FROM evidence_results WHERE video_url = ? ORDER BY created_at DESC LIMIT 1',
+                    (video_url,)
+                )
+                result = cursor.fetchone()
+                return dict(result) if result else None
+        except sqlite3.Error as e:
+            logging.error(f"Error getting evidence result by video URL: {e}")
             return None
 
     def get_all_evidence_results(self, limit=100, offset=0):
@@ -603,25 +780,25 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         self.minimum_eye_closed_threshold = 3
         self.normal_state_ratio_threshold = 5
         self.minimum_frames_for_analysis = 10
-        
+
         # Add new parameters from drowsiness_analyzer.py
         # --- Score Calculation Parameters ---
         self.perclos_scale = 1.2
         self.duration_scale = 1.8
         self.yawn_rate_scale = 1.5
         self.score_cap = 2.5
-        
+
         # --- Weights (Balanced) ---
         self.eye_metric_weight = 0.7  # More weight to eye metrics
         self.yawn_metric_weight = 0.3  # Less weight to yawn metrics
-        
+
         # --- Non-Linear Damping Parameters ---
         self.damping_base_factor = 0.8
         self.damping_power = 2.5
-        
+
         # --- Decision Making ---
         self.drowsiness_decision_threshold = 0.55
-        
+
         # --- Extreme Thresholds for Conditional Overrides ---
         self.extreme_perclos_threshold = 45.0
         self.extreme_duration_threshold = 1.5
@@ -815,7 +992,7 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         # For backward compatibility, check head pose override
         # Check if head is in a distracted position (either turned or down)
         is_head_distracted = is_head_turned or is_head_down
-        
+
         if is_head_distracted and is_drowsy:
             is_drowsy = False
             reason = 'head_pose_override'
@@ -1280,6 +1457,25 @@ def process_video_task(queue_item):
     logging.info(f"Processing video from queue: {queue_id}, URL: {video_url}")
 
     try:
+        # Get the queue status to check if it has an associated evidence_id
+        queue_status = db_manager.get_queue_status(queue_id)
+        existing_evidence_id = queue_status.get('evidence_id') if queue_status else None
+
+        # If the queue has an associated evidence_id, use that
+        if existing_evidence_id:
+            existing_evidence = db_manager.get_evidence_result(existing_evidence_id)
+            is_reprocessing = existing_evidence is not None
+            if is_reprocessing:
+                logging.info(f"Reprocessing video from queue: {queue_id}, URL: {video_url}, Existing evidence ID from queue: {existing_evidence_id}")
+        else:
+            # Otherwise, check if this video has been processed before
+            existing_evidence = db_manager.get_evidence_result_by_video_url(video_url)
+            is_reprocessing = existing_evidence is not None
+            if is_reprocessing:
+                logging.info(f"Reprocessing video from queue: {queue_id}, URL: {video_url}, Existing evidence ID from lookup: {existing_evidence['id']}")
+                # Update the queue with the evidence_id
+                db_manager.update_queue_evidence_id(queue_id, existing_evidence['id'])
+
         # Process the video
         start_time = time.time()
         processing_success, detection_results = yolo_processor.process_video(video_url)
@@ -1289,58 +1485,93 @@ def process_video_task(queue_item):
             # Update queue status to failed
             db_manager.update_queue_status(queue_id, 'failed')
 
-            # Store the failed evidence with status 'failed'
+            # Store or update the failed evidence
             try:
                 # Create a minimal evidence record for the failed video
-                failed_evidence = {
-                    'video_url': video_url,
-                    'processing_status': 'failed',
-                    'process_time': process_time,
-                    'details': json.dumps({
-                        'error': 'Failed to process video',
-                        'timestamp': datetime.datetime.now().isoformat()
-                    })
+                failed_details = {
+                    'error': 'Failed to process video',
+                    'timestamp': datetime.datetime.now().isoformat()
                 }
 
-                # Insert into database with a direct SQL query to handle the failed case
-                with sqlite3.connect(db_manager.db_path) as conn:
-                    conn.execute('''
-                        INSERT INTO evidence_results (
-                            video_url, process_time, processing_status, details
-                        ) VALUES (?, ?, ?, ?)
-                    ''', (
-                        video_url,
-                        process_time,
-                        'failed',
-                        failed_evidence['details']
-                    ))
-                    conn.commit()
-                    logging.info(f"Stored failed evidence record for {video_url}")
+                if is_reprocessing:
+                    # Update existing evidence record
+                    evidence_id = existing_evidence['id']
+                    with sqlite3.connect(db_manager.db_path) as conn:
+                        conn.execute('''
+                            UPDATE evidence_results SET
+                                process_time = ?,
+                                processing_status = ?,
+                                details = ?
+                            WHERE id = ?
+                        ''', (
+                            process_time,
+                            'failed',
+                            json.dumps(failed_details),
+                            evidence_id
+                        ))
+                        conn.commit()
+                        logging.info(f"Updated failed evidence record for {video_url}, ID: {evidence_id}")
+                else:
+                    # Insert new evidence record
+                    with sqlite3.connect(db_manager.db_path) as conn:
+                        cursor = conn.execute('''
+                            INSERT INTO evidence_results (
+                                video_url, process_time, processing_status, details
+                            ) VALUES (?, ?, ?, ?)
+                        ''', (
+                            video_url,
+                            process_time,
+                            'failed',
+                            json.dumps(failed_details)
+                        ))
+                        evidence_id = cursor.lastrowid
+                        conn.commit()
+                        logging.info(f"Stored failed evidence record for {video_url}, ID: {evidence_id}")
+
+                    # Update the queue with the evidence_id
+                    db_manager.update_queue_evidence_id(queue_id, evidence_id)
 
                 # Send webhook notification for failed processing
                 send_webhook_notification(
                     queue_id=queue_id,
-                    evidence_id=None,
+                    evidence_id=evidence_id,
                     status='failed',
                     video_url=video_url,
                     results={'error': 'Failed to process video'}
                 )
             except Exception as e:
-                logging.error(f"Error storing failed evidence record: {e}")
+                logging.error(f"Error storing/updating failed evidence record: {e}")
 
             return
 
         # Analyze drowsiness
         analysis_result = drowsiness_analyzer.analyze(detection_results)
 
-        # Store results in database
-        evidence_id = db_manager.store_evidence_result(
-            video_url,
-            detection_results,
-            analysis_result,
-            process_time,
-            detection_results.get('head_pose')
-        )
+        # Store or update results in database
+        if is_reprocessing:
+            # Update existing evidence
+            evidence_id = db_manager.update_evidence_result(
+                existing_evidence['id'],
+                video_url,
+                detection_results,
+                analysis_result,
+                process_time,
+                detection_results.get('head_pose')
+            )
+            logging.info(f"Updated existing evidence result for {video_url}, ID: {evidence_id}")
+        else:
+            # Store new evidence
+            evidence_id = db_manager.store_evidence_result(
+                video_url,
+                detection_results,
+                analysis_result,
+                process_time,
+                detection_results.get('head_pose')
+            )
+            logging.info(f"Stored new evidence result for {video_url}, ID: {evidence_id}")
+
+            # Update the queue with the evidence_id
+            db_manager.update_queue_evidence_id(queue_id, evidence_id)
 
         # Update queue status
         db_manager.update_queue_status(queue_id, 'completed')
@@ -1430,12 +1661,13 @@ def index():
         'message': 'Simplified Drowsiness Detection API',
         'version': '1.1.0',
         'endpoints': [
-            '/api/process',          # Add a video to the processing queue
-            '/api/queue/<id>',       # Check the status of a queued video
-            '/api/queue',            # Get queue statistics
-            '/api/results',          # Get all processed videos
-            '/api/result/<id>',      # Get details for a specific processed video
-            '/api/webhook',          # Manage webhooks (GET, POST, DELETE)
+            '/api/process',                # Add a video to the processing queue
+            '/api/queue/<id>',             # Check the status of a queued video
+            '/api/queue',                  # Get queue statistics
+            '/api/queue/update-range',     # Update status of a range of queue items
+            '/api/results',                # Get all processed videos
+            '/api/result/<id>',            # Get details for a specific processed video
+            '/api/webhook',                # Manage webhooks (GET, POST, DELETE)
         ]
     })
 
@@ -1493,17 +1725,26 @@ def get_queue_status(queue_id):
                 'error': f'Queue item with ID {queue_id} not found'
             }), 404
 
+        # Get evidence_id from queue status if available
+        evidence_id = queue_status.get('evidence_id')
+
         # Check if processing is complete
         if queue_status['status'] == 'completed':
-            # Find the evidence result
-            with sqlite3.connect(db_manager.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.execute(
-                    'SELECT id FROM evidence_results WHERE video_url = ? ORDER BY created_at DESC LIMIT 1',
-                    (queue_status['video_url'],)
-                )
-                evidence = cursor.fetchone()
-                evidence_id = evidence['id'] if evidence else None
+            # If evidence_id is not in the queue, try to find it
+            if not evidence_id:
+                # Find the evidence result
+                with sqlite3.connect(db_manager.db_path) as conn:
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.execute(
+                        'SELECT id FROM evidence_results WHERE video_url = ? ORDER BY created_at DESC LIMIT 1',
+                        (queue_status['video_url'],)
+                    )
+                    evidence = cursor.fetchone()
+                    evidence_id = evidence['id'] if evidence else None
+
+                    # Update the queue with the evidence_id if found
+                    if evidence_id:
+                        db_manager.update_queue_evidence_id(queue_id, evidence_id)
 
             return jsonify({
                 'success': True,
@@ -1524,6 +1765,8 @@ def get_queue_status(queue_id):
                     'status': queue_status['status'],
                     'video_url': queue_status['video_url'],
                     'created_at': queue_status['created_at'],
+                    'evidence_id': evidence_id,
+                    'result_url': f'/api/result/{evidence_id}' if evidence_id else None,
                     'error': 'Video processing failed'
                 }
             })
@@ -1534,7 +1777,9 @@ def get_queue_status(queue_id):
                     'queue_id': queue_id,
                     'status': queue_status['status'],
                     'video_url': queue_status['video_url'],
-                    'created_at': queue_status['created_at']
+                    'created_at': queue_status['created_at'],
+                    'evidence_id': evidence_id,
+                    'result_url': f'/api/result/{evidence_id}' if evidence_id else None
                 }
             })
 
@@ -1591,6 +1836,100 @@ def get_queue_stats():
 
     except Exception as e:
         logging.error(f"Error getting queue stats: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/queue/update-range', methods=['POST'])
+def update_queue_range():
+    """Update the status of a range of queue items."""
+    try:
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing request data'
+            }), 400
+
+        # Validate required parameters
+        if 'start_id' not in data or 'end_id' not in data or 'status' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required parameters: start_id, end_id, and status are required'
+            }), 400
+
+        start_id = data['start_id']
+        end_id = data['end_id']
+        status = data['status']
+
+        # Validate IDs
+        if not isinstance(start_id, int) or not isinstance(end_id, int) or start_id <= 0 or end_id <= 0:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid ID values: start_id and end_id must be positive integers'
+            }), 400
+
+        # Validate range
+        if start_id > end_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid range: start_id must be less than or equal to end_id'
+            }), 400
+
+        # Validate status
+        valid_statuses = ['pending', 'processing', 'completed', 'failed']
+        if status not in valid_statuses:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid status: must be one of {", ".join(valid_statuses)}'
+            }), 400
+
+        # If setting to pending, we need to get the queue items first to handle reprocessing
+        if status == 'pending':
+            # Get the queue items in the specified range
+            with sqlite3.connect(db_manager.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT id, video_url, evidence_id FROM processing_queue WHERE id >= ? AND id <= ?',
+                    (start_id, end_id)
+                )
+                queue_items = [dict(row) for row in cursor.fetchall()]
+
+            # Update queue items in the specified range (only update status, preserve evidence_id)
+            affected_rows = db_manager.update_queue_status_range(start_id, end_id, status)
+
+            # Return response with queue items that will be reprocessed
+            return jsonify({
+                'success': True,
+                'message': f'Successfully updated {affected_rows} queue items to pending status. They will be reprocessed with their existing evidence results.',
+                'data': {
+                    'start_id': start_id,
+                    'end_id': end_id,
+                    'status': status,
+                    'affected_rows': affected_rows,
+                    'queue_items': queue_items
+                }
+            })
+        else:
+            # For other statuses, just update the queue items
+            affected_rows = db_manager.update_queue_status_range(start_id, end_id, status)
+
+            return jsonify({
+                'success': True,
+                'message': f'Successfully updated {affected_rows} queue items',
+                'data': {
+                    'start_id': start_id,
+                    'end_id': end_id,
+                    'status': status,
+                    'affected_rows': affected_rows
+                }
+            })
+
+    except Exception as e:
+        logging.error(f"Error updating queue range: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
