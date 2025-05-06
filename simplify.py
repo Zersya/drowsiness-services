@@ -6,6 +6,7 @@ import time
 import datetime
 import json
 import hashlib
+import math
 import numpy as np
 import torch
 from ultralytics import YOLO
@@ -592,6 +593,7 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
 
     def __init__(self, eye_closed_percentage_threshold=5, yawn_percentage_threshold=5, normal_state_threshold=60, fps=20, max_closure_duration_threshold=0.3):
         """Initialize with adjusted thresholds for better detection."""
+        # Keep original parameters for backward compatibility
         self.eye_closed_percentage_threshold = eye_closed_percentage_threshold
         self.yawn_percentage_threshold = yawn_percentage_threshold
         self.normal_state_threshold = normal_state_threshold
@@ -601,6 +603,73 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         self.minimum_eye_closed_threshold = 3
         self.normal_state_ratio_threshold = 5
         self.minimum_frames_for_analysis = 10
+        
+        # Add new parameters from drowsiness_analyzer.py
+        # --- Score Calculation Parameters ---
+        self.perclos_scale = 1.2
+        self.duration_scale = 1.8
+        self.yawn_rate_scale = 1.5
+        self.score_cap = 2.5
+        
+        # --- Weights (Balanced) ---
+        self.eye_metric_weight = 0.7  # More weight to eye metrics
+        self.yawn_metric_weight = 0.3  # Less weight to yawn metrics
+        
+        # --- Non-Linear Damping Parameters ---
+        self.damping_base_factor = 0.8
+        self.damping_power = 2.5
+        
+        # --- Decision Making ---
+        self.drowsiness_decision_threshold = 0.55
+        
+        # --- Extreme Thresholds for Conditional Overrides ---
+        self.extreme_perclos_threshold = 45.0
+        self.extreme_duration_threshold = 1.5
+        self.extreme_yawn_rate_threshold = 15.0
+        self.override_max_normal_perc = 40.0
+
+    def _calculate_metric_score(self, value, threshold, scale):
+        """Calculates a score based on how much a value exceeds a threshold, with capping."""
+        if value > threshold and threshold > 0:
+            score = ((value - threshold) / threshold) * scale
+            return min(score, self.score_cap)
+        return 0.0
+
+    def _calculate_damping(self, normal_state_percentage):
+        """Calculates damping amount using a non-linear function."""
+        if normal_state_percentage <= 0:
+            return 0.0
+        # Damping = base * (normal_perc / 100) ^ power
+        damping_fraction = normal_state_percentage / 100.0
+        damping_amount = self.damping_base_factor * math.pow(damping_fraction, self.damping_power)
+        # Ensure damping doesn't exceed 1.0 (or slightly less to avoid zeroing out score)
+        return min(damping_amount, 0.99)
+
+    def _create_details_dict(self, perclos, duration, yawn_rate, normal_perc,
+                             p_score, dur_score, y_score, eye_score, raw_score, damping,
+                             reason, yawn_cnt, eye_closed_det_cnt, max_consec,
+                             norm_frames, tot_frames, fps):
+        """Helper function to create the details dictionary."""
+        return {
+            'eye_closed_percentage': perclos,
+            'max_closure_duration': duration,
+            'yawn_percentage': yawn_rate,
+            'normal_state_percentage': normal_perc,
+            # 'perclos_score': p_score,
+            # 'duration_score': dur_score,
+            # 'yawn_score': y_score,
+            # 'combined_eye_score_avg': eye_score,
+            # 'raw_drowsiness_score': raw_score,
+            # 'applied_damping_factor': damping,
+            'reason': reason,
+            # Raw Inputs
+            'yawn_frames': yawn_cnt,
+            'eye_closed_frames': eye_closed_det_cnt,
+            'max_consecutive_eye_closed': max_consec,
+            'normal_state_frames': norm_frames,
+            'total_frames': tot_frames,
+            'fps': fps
+        }
 
     def analyze(self, detection_results):
         """Analyze drowsiness based on detection metrics."""
@@ -609,7 +678,6 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         eye_closed_frames = detection_results.get('eye_closed_frames', 0)
         normal_state_frames = detection_results.get('normal_state_frames', 0)
         total_frames = detection_results.get('total_frames', 0)
-        # Use eye_closed_frames directly
         max_consecutive_eye_closed = detection_results.get('max_consecutive_eye_closed', 0)
         fps = detection_results.get('metrics', {}).get('fps', self.fps)
 
@@ -652,99 +720,135 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
             }
 
         # Calculate metrics based on video properties
+        time_in_seconds = total_frames / fps if fps > 0 else 0
+        time_in_minutes = time_in_seconds / 60 if time_in_seconds > 0 else 0
 
         # Calculate percentage metrics
         eye_closed_percentage = (eye_closed_frames / total_frames) * 100 if total_frames > 0 else 0
         max_closure_duration = max_consecutive_eye_closed / fps if fps > 0 else 0
         yawn_percentage = (yawn_frames / total_frames) * 100 if total_frames > 0 else 0
         normal_state_percentage = (normal_state_frames / total_frames) * 100 if total_frames > 0 else 0
+        yawn_rate_per_minute = yawn_frames / time_in_minutes if time_in_minutes > 0 else 0
 
-        # Drowsiness indicators - more sensitive to eye closures
-        is_drowsy_eyes = (eye_closed_percentage > self.eye_closed_percentage_threshold or
-                        max_closure_duration > self.max_closure_duration_threshold or
-                        eye_closed_frames >= self.minimum_eye_closed_threshold)
-        # Check for drowsiness based on yawn percentage
-        is_drowsy_yawns = (yawn_frames >= self.minimum_yawn_threshold and
-                        yawn_percentage > self.yawn_percentage_threshold)
-        is_drowsy_excessive_yawns = yawn_frames > 10 or yawn_percentage > 20  # 20% is excessive
-
-        # Check if head pose indicates distraction (head down or turned)
-        is_head_distracted = is_head_turned or is_head_down
-
-        # Check normal state conditions
-        is_normal_state_high = normal_state_percentage >= self.normal_state_threshold
-
-        # Determine drowsiness with priority order
+        # --- Check for Conditional Extreme Overrides ---
+        final_score = 0.0
         is_drowsy = False
-        confidence = 0.0
-        reason = ''
+        reason = "checking_extremes"
+        override_triggered = False
 
-        if is_drowsy_excessive_yawns:
-            is_drowsy = True
-            confidence = 1.0
-            reason = 'excessive_yawns'
-        elif is_drowsy_yawns and yawn_percentage > 15:  # High percentage of yawning frames
-            is_drowsy = True
-            confidence = 0.8
-            reason = 'high_yawn_rate'
-        elif is_normal_state_high and not (is_drowsy_yawns or is_drowsy_eyes):
-            is_drowsy = False
-            confidence = 0.1
-            reason = 'high_normal_state'
-        else:
-            # Consider head pose when determining drowsiness
-            # If head is turned or down, we don't consider it drowsy even if other indicators are present
-            if is_head_distracted:
-                is_drowsy = False
-                reason = 'head_pose_override'
-                logging.info(f"Head pose override: Head turned={is_head_turned}, Head down={is_head_down}")
+        # Check if normal state allows overrides
+        allow_override = normal_state_percentage < self.override_max_normal_perc
+
+        if allow_override:
+            # Prioritize more reliable extreme indicators
+            if max_closure_duration >= self.extreme_duration_threshold:
+                reason = f"extreme_duration (>{self.extreme_duration_threshold}s) & low_normal ({normal_state_percentage:.1f}%)"
+                override_triggered = True
+            elif eye_closed_percentage >= self.extreme_perclos_threshold:
+                reason = f"extreme_perclos (>{self.extreme_perclos_threshold}%) & low_normal ({normal_state_percentage:.1f}%)"
+                override_triggered = True
+            elif yawn_rate_per_minute >= self.extreme_yawn_rate_threshold:
+                reason = f"extreme_yawn_rate (>{self.extreme_yawn_rate_threshold}/min) & low_normal ({normal_state_percentage:.1f}%)"
+                override_triggered = True
+
+            if override_triggered:
+                is_drowsy = True
+                # Assign a high score, bypassing normal calculation and damping
+                final_score = self.score_cap  # Use max possible score
+                logging.info(f"Conditional Drowsiness Override Triggered: {reason}")
+                details = self._create_details_dict(
+                    eye_closed_percentage, max_closure_duration, yawn_percentage, normal_state_percentage,
+                    0, 0, 0, 0, 0, 0,  # Scores/damping not applicable here
+                    reason, yawn_frames, eye_closed_frames, max_consecutive_eye_closed,
+                    normal_state_frames, total_frames, fps
+                )
+                return {'is_drowsy': True, 'confidence': final_score, 'details': details}
+
+        # --- Calculate Individual Scores (If no override) ---
+        perclos_score = self._calculate_metric_score(eye_closed_percentage, self.eye_closed_percentage_threshold, self.perclos_scale)
+        duration_score = self._calculate_metric_score(max_closure_duration, self.max_closure_duration_threshold, self.duration_scale)
+        yawn_score = self._calculate_metric_score(yawn_percentage, self.yawn_percentage_threshold, self.yawn_rate_scale)
+
+        # Combine eye scores using AVERAGE
+        combined_eye_score = (perclos_score + duration_score) / 2.0
+
+        # --- Calculate Raw Drowsiness Score ---
+        raw_drowsiness_score = (combined_eye_score * self.eye_metric_weight +
+                                yawn_score * self.yawn_metric_weight)
+
+        # --- Apply Non-Linear Normal State Damping ---
+        damping_amount = self._calculate_damping(normal_state_percentage)
+
+        final_score = raw_drowsiness_score * (1.0 - damping_amount)
+        final_score = max(0.0, min(final_score, self.score_cap))  # Ensure score stays within [0, score_cap]
+
+        # --- Make Final Drowsiness Decision ---
+        is_drowsy = final_score >= self.drowsiness_decision_threshold
+
+        # --- Determine Reason ---
+        if is_drowsy:
+            # Check contributions before damping to see what pushed it over
+            eye_contribution = combined_eye_score * self.eye_metric_weight
+            yawn_contribution = yawn_score * self.yawn_metric_weight
+            # Use a slightly larger tolerance or relative comparison if needed
+            if eye_contribution > yawn_contribution + 0.05:
+                reason = f"eye_metrics_dominant (Score: {final_score:.2f})"
+            elif yawn_contribution > eye_contribution + 0.05:
+                reason = f"yawn_metrics_dominant (Score: {final_score:.2f})"
             else:
-                is_drowsy = is_drowsy_eyes or is_drowsy_yawns
+                # Check if only one metric was non-zero
+                if combined_eye_score > 0 and yawn_score == 0:
+                    reason = f"eye_metrics_only (Score: {final_score:.2f})"
+                elif yawn_score > 0 and combined_eye_score == 0:
+                    reason = f"yawn_metrics_only (Score: {final_score:.2f})"
+                else:
+                    reason = f"combined_metrics_threshold_met (Score: {final_score:.2f})"
+        elif final_score > 0:
+            reason = f"indicators_present_below_threshold (Score: {final_score:.2f})"
+        else:
+            # Reached here means final_score is 0
+            if raw_drowsiness_score > 0:  # Was non-zero before damping
+                reason = f"indicators_damped_to_zero (Raw: {raw_drowsiness_score:.2f}, Damp: {damping_amount:.2f})"
+            else:  # Raw score was already zero
+                reason = "no_significant_indicators"
 
-            # Calculate confidence based on new metrics - increased weight for eye closures
-            eye_percentage_confidence = min(eye_closed_percentage / self.eye_closed_percentage_threshold, 1.0) if eye_closed_percentage > 0 else 0
-            eye_duration_confidence = min(max_closure_duration / self.max_closure_duration_threshold, 1.0) if max_closure_duration > 0 else 0
-            eye_count_confidence = min(eye_closed_frames / self.minimum_eye_closed_threshold, 1.0) if eye_closed_frames > 0 else 0
-            # Use all three eye metrics for a more comprehensive eye confidence
-            eye_confidence = max(eye_percentage_confidence, eye_duration_confidence, eye_count_confidence)
-            yawn_confidence = min(yawn_percentage / self.yawn_percentage_threshold, 1.0) if yawn_percentage > 0 else 0
-            # Give more weight to eye confidence (0.7) compared to yawn confidence (0.3)
-            confidence = max(eye_confidence, yawn_confidence)
+        # For backward compatibility, check head pose override
+        # Check if head is in a distracted position (either turned or down)
+        is_head_distracted = is_head_turned or is_head_down
+        
+        if is_head_distracted and is_drowsy:
+            is_drowsy = False
+            reason = 'head_pose_override'
+            logging.info(f"Head pose override: Head turned={is_head_turned}, Head down={is_head_down}")
 
-            # Adjust confidence based on normal state using a quadratic factor
-            if normal_state_percentage > 0:
-                normal_state_factor = (1 - normal_state_percentage / 100) ** 2
-                confidence *= normal_state_factor
+        # --- Format Results ---
+        details = self._create_details_dict(
+            eye_closed_percentage, max_closure_duration, yawn_percentage, normal_state_percentage,
+            perclos_score, duration_score, yawn_score, combined_eye_score,
+            raw_drowsiness_score, damping_amount, reason,
+            yawn_frames, eye_closed_frames, max_consecutive_eye_closed,
+            normal_state_frames, total_frames, fps
+        )
 
-            reason = 'drowsy_indicators_present' if is_drowsy else 'no_significant_indicators'
-
-            # Override drowsiness if confidence is very low due to normal state
-            if is_drowsy and confidence < 0.15:
-                is_drowsy = False
-                reason = 'low_confidence_due_to_normal_state'
+        # Add backward compatibility fields
+        details.update({
+            'is_drowsy_eyes': eye_closed_percentage > self.eye_closed_percentage_threshold or
+                             max_closure_duration > self.max_closure_duration_threshold or
+                             eye_closed_frames >= self.minimum_eye_closed_threshold,
+            'is_drowsy_yawns': yawn_frames >= self.minimum_yawn_threshold and
+                              yawn_percentage > self.yawn_percentage_threshold,
+            'is_drowsy_excessive_yawns': yawn_frames > 10 or yawn_percentage > 20,
+            'is_normal_state_high': normal_state_percentage >= self.normal_state_threshold,
+            'is_head_turned': is_head_turned,
+            'is_head_down': is_head_down,
+            'head_turned_frames': head_turned_frames,
+            'head_down_frames': head_down_frames
+        })
 
         result = {
             'is_drowsy': is_drowsy,
-            'confidence': confidence,
-            'details': {
-                'eye_closed_percentage': eye_closed_percentage,
-                'max_closure_duration': max_closure_duration,
-                'yawn_percentage': yawn_percentage,
-                'normal_state_percentage': normal_state_percentage,
-                'is_drowsy_eyes': is_drowsy_eyes,
-                'is_drowsy_yawns': is_drowsy_yawns,
-                'is_drowsy_excessive_yawns': is_drowsy_excessive_yawns,
-                'is_normal_state_high': is_normal_state_high,
-                'is_head_turned': is_head_turned,
-                'is_head_down': is_head_down,
-                'head_turned_frames': head_turned_frames,
-                'head_down_frames': head_down_frames,
-                'yawn_frames': yawn_frames,
-                'eye_closed_frames': eye_closed_frames,
-                'max_consecutive_eye_closed': max_consecutive_eye_closed,
-                'normal_state_frames': normal_state_frames,
-                'reason': reason
-            }
+            'confidence': final_score,
+            'details': details
         }
 
         logging.info(f"Analysis result: {result}")
