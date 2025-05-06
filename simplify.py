@@ -772,6 +772,7 @@ class YoloProcessor:
         self.model = self.load_model()
         # Add parameters for eye detection tuning
         self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '1'))
+        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '2'))  # Frames to wait before counting next blink
         self.eye_closed_confidence = float(os.getenv('EYE_CLOSED_CONFIDENCE', '0.6'))
         self.yawn_confidence = float(os.getenv('YAWN_CONFIDENCE', '0.6'))
         self.normal_state_confidence = float(os.getenv('NORMAL_STATE_CONFIDENCE', '0.6'))
@@ -829,6 +830,8 @@ class YoloProcessor:
         self.eye_closed_frames = 0
         self.yawn_frames = 0
         self.normal_state_frames = 0
+        self.blink_cooldown_counter = 0
+        self.potential_blink_frames = 0
         self.metrics = {}
 
     def process_frame(self, frame):
@@ -1016,12 +1019,29 @@ class YoloProcessor:
                         for i, cls_id in enumerate(cls_ids):
                             if cls_id == 0 and confs[i] >= self.eye_closed_confidence:  # Assuming class 0 is 'eye_closed'
                                 eye_closed_detected = True
-                                self.eye_closed_frames += 1
                                 self.consecutive_eye_closed += 1
+                                self.potential_blink_frames += 1
                                 break
 
-                        if not eye_closed_detected:
+                        if eye_closed_detected:
+                            # Count eye closed events if we have enough consecutive frames and not in cooldown
+                            if self.potential_blink_frames >= self.min_blink_frames and self.blink_cooldown_counter == 0:
+                                self.eye_closed_frames += 1
+                                self.blink_cooldown_counter = self.blink_cooldown
+                                logging.info(f"Eye closure detected with confidence")
+                        else:
+                            # Even when eyes are no longer detected as closed, if we had enough frames
+                            # to consider it a valid eye closure, count it
+                            if self.potential_blink_frames >= self.min_blink_frames and self.blink_cooldown_counter == 0:
+                                self.eye_closed_frames += 1
+                                self.blink_cooldown_counter = self.blink_cooldown
+                                logging.info("Eye closure event counted after detection ended")
+                            self.potential_blink_frames = 0
                             self.consecutive_eye_closed = 0
+
+                        # Decrement cooldown counter if active
+                        if self.blink_cooldown_counter > 0:
+                            self.blink_cooldown_counter -= 1
 
                         # Update max consecutive eye closed frames
                         self.max_consecutive_eye_closed = max(self.max_consecutive_eye_closed, self.consecutive_eye_closed)
@@ -1044,13 +1064,6 @@ class YoloProcessor:
             # Close the video file
             cap.release()
 
-            # Prepare metrics
-            self.metrics = {
-                'fps': self.current_fps,
-                'process_time': process_time,
-                'processed_frames': frame_count
-            }
-
             # Prepare detection results
             detection_results = {
                 'yawn_frames': self.yawn_frames,
@@ -1058,7 +1071,14 @@ class YoloProcessor:
                 'max_consecutive_eye_closed': self.max_consecutive_eye_closed,
                 'normal_state_frames': self.normal_state_frames,
                 'total_frames': self.total_frames,
-                'metrics': self.metrics,
+                'metrics': {
+                    'fps': self.current_fps,
+                    'process_time': process_time,
+                    'processed_frames': frame_count,
+                    'consecutive_eye_closed': self.consecutive_eye_closed,
+                    'potential_blink_frames': self.potential_blink_frames,
+                    'processed_frame_ratio': frame_count / self.total_frames if self.total_frames > 0 else 0
+                },
                 'head_pose': {
                     'head_turned': is_head_turned,
                     'head_down': is_head_down
