@@ -403,8 +403,6 @@ class DatabaseManager:
             logging.error(f"Error getting active webhooks: {e}")
             return []
 
-
-# Pose Head Detector
 class PoseHeadDetector:
     """
     Class for detecting head pose (head down or head turn) using YOLOv8 pose model.
@@ -539,27 +537,36 @@ class PoseHeadDetector:
                     right_eye_xy, re_conf = get_kp("right_eye")
 
                     if n_conf > self.keypoint_conf_threshold and \
-                       le_conf > self.keypoint_conf_threshold and \
-                       re_conf > self.keypoint_conf_threshold:
+                    le_conf > self.keypoint_conf_threshold and \
+                    re_conf > self.keypoint_conf_threshold:
 
                         # --- Head Turn Check (from pose_head_detector.py) ---
                         eye_center_x = (left_eye_xy[0] + right_eye_xy[0]) / 2.0
                         eye_dist_x_pixels = abs(left_eye_xy[0] - right_eye_xy[0])
-                        
+
                         # Check eye_dist_x_pixels to prevent division by zero or instability if eyes are too close/same point
                         if eye_dist_x_pixels > 5: # A small threshold for inter-eye distance
                             nose_deviation_from_center_x = abs(nose_xy[0] - eye_center_x)
-                            if nose_deviation_from_center_x > (eye_dist_x_pixels * self.head_turn_ratio_threshold):
+                            # Calculate current turn ratio
+                            current_turn_ratio = nose_deviation_from_center_x / eye_dist_x_pixels if eye_dist_x_pixels else float('inf')
+                            logging.debug(f"Head Turn Check: eye_dist_x_pixels={eye_dist_x_pixels:.2f}, "
+                                        f"nose_deviation_x={nose_deviation_from_center_x:.2f}, "
+                                        f"current_turn_ratio={current_turn_ratio:.2f} (Threshold: {self.head_turn_ratio_threshold})")
+                            if current_turn_ratio > self.head_turn_ratio_threshold:
                                 frame_flag_head_turned = True
-                        
+
                         # --- Head Down Check (from pose_head_detector.py) ---
                         eye_center_y = (left_eye_xy[1] + right_eye_xy[1]) / 2.0
-                        # Use horizontal eye distance as a stable reference for scaling vertical deviation
-                        # eye_dist_x_pixels is already calculated above.
-                        
+
                         if eye_dist_x_pixels > 5: # Again, ensure eyes are reasonably detected
                             nose_vertical_drop_from_eye_center = nose_xy[1] - eye_center_y # Positive if nose is below eye center
-                            if nose_vertical_drop_from_eye_center > (eye_dist_x_pixels * self.head_down_ratio_threshold):
+                            # Calculate current down ratio
+                            current_down_ratio = nose_vertical_drop_from_eye_center / eye_dist_x_pixels if eye_dist_x_pixels else float('inf')
+                            logging.debug(f"Head Down Check: eye_dist_x_pixels={eye_dist_x_pixels:.2f}, "
+                                        f"nose_vertical_drop={nose_vertical_drop_from_eye_center:.2f}, "
+                                        f"current_down_ratio={current_down_ratio:.2f} (Threshold: {self.head_down_ratio_threshold})")
+                            # Only flag as down if nose is actually below eye center and ratio is met
+                            if nose_vertical_drop_from_eye_center > 0 and current_down_ratio > self.head_down_ratio_threshold:
                                 frame_flag_head_down = True
                     else:
                         logging.debug("Not all required keypoints (nose, eyes) found or confident enough for pose analysis.")
@@ -593,8 +600,6 @@ class PoseHeadDetector:
             "head_down_threshold": self.head_down_frames_threshold
         }
 
-
-# Drowsiness Analyzer
 class DrowsinessAnalyzer(ABC):
     """Abstract base class for drowsiness analysis implementations."""
 
