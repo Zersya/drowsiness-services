@@ -406,17 +406,24 @@ class DatabaseManager:
 
 # Pose Head Detector
 class PoseHeadDetector:
-    """Class for detecting head pose (head down or head turn) using YOLOv8 pose model."""
+    """
+    Class for detecting head pose (head down or head turn) using YOLOv8 pose model.
+    Logic updated to align with the version from pose_head_detector.py for potentially improved performance.
+    """
 
-    def __init__(self, model_path=POSE_MODEL_PATH):
-        """Initialize the pose head detector."""
+    def __init__(self, model_path=None): # Use global POSE_MODEL_PATH if None
+        if model_path is None:
+            model_path = os.getenv("POSE_MODEL_PATH", "yolov8l-pose.pt")
+
         self.model_path = model_path
-        self.use_cuda = USE_CUDA
+        self.use_cuda = os.getenv('USE_CUDA', 'true').lower() == 'true'
 
-        # Configuration parameters
+        # Configuration parameters from pose_head_detector.py (and simplify.py uses similar env vars)
         self.keypoint_conf_threshold = float(os.getenv('KEYPOINT_CONF_THRESHOLD', '0.5'))
-        self.head_turn_ratio_threshold = float(os.getenv('HEAD_TURN_RATIO_THRESHOLD', '0.7'))
-        self.head_down_ratio_threshold = float(os.getenv('HEAD_DOWN_RATIO_THRESHOLD', '0.3'))
+        # Head turn: ratio of nose deviation from eye center to inter-eye distance
+        self.head_turn_ratio_threshold = float(os.getenv('HEAD_TURN_RATIO_THRESHOLD', '0.7')) # php.py uses 0.7
+        # Head down: ratio of nose vertical drop from eye center to inter-eye distance (horizontal)
+        self.head_down_ratio_threshold = float(os.getenv('HEAD_DOWN_RATIO_THRESHOLD', '0.3')) # php.py uses 0.3
 
         # Time thresholds (in seconds)
         self.head_turned_threshold_seconds = float(os.getenv('HEAD_TURNED_THRESHOLD_SECONDS', '1.5'))
@@ -425,157 +432,166 @@ class PoseHeadDetector:
         # Counters
         self.head_turned_counter = 0
         self.head_down_counter = 0
-
+        
         # Status flags
         self.distracted_head_turn = False
         self.distracted_head_down = False
-
-        # Define COCO keypoint indices (only need head-related ones)
+        
+        # Define COCO keypoint indices (from pose_head_detector.py - only needs these three for its logic)
         self.kp_indices = {
             "nose": 0, "left_eye": 1, "right_eye": 2,
-            "left_ear": 3, "right_ear": 4,
-            "left_shoulder": 5, "right_shoulder": 6
+            # "left_ear": 3, "right_ear": 4, # Not used by php.py logic
+            # "left_shoulder": 5, "right_shoulder": 6 # Not used by php.py logic
         }
-
-        # Load the model
+        
         self.model = self.load_model()
 
-        # Set frames thresholds based on FPS and time thresholds
-        self.fps = 20  # Default FPS, will be updated during processing
-        self.update_frame_thresholds()
-
-    def update_frame_thresholds(self, fps=None):
-        """Update frame thresholds based on FPS."""
-        if fps is not None:
-            self.fps = fps
-
-        # Convert time thresholds to frame counts
+        # Frame thresholds will be set by update_frame_thresholds() or a reset method
+        self.fps = 20 # Default, should be updated
         self.head_turned_frames_threshold = int(self.head_turned_threshold_seconds * self.fps)
         self.head_down_frames_threshold = int(self.head_down_threshold_seconds * self.fps)
 
-    def load_model(self):
-        """Load the YOLOv8 pose model."""
-        try:
-            # Check if model file exists
-            if not os.path.exists(self.model_path):
-                logging.warning(f"Pose model not found at {self.model_path}. Head pose detection will be disabled.")
-                return None
 
-            # Check if CUDA is available and enabled
+    def load_model(self):
+        """Loads and returns a YOLO pose model."""
+        logging.info(f"Loading YOLO pose model from {self.model_path}...")
+        try:
             cuda_available = torch.cuda.is_available()
             device = 'cuda' if (cuda_available and self.use_cuda) else 'cpu'
             logging.info(f"Pose model: CUDA available: {cuda_available}, Using device: {device}")
 
-            # Load the model
             model = YOLO(self.model_path)
             model.to(device)
-
-            logging.info(f"Pose model loaded successfully from {self.model_path}")
+            # model.conf = 0.25 # General confidence threshold for detection (php.py sets this)
+            # model.iou = 0.45  # NMS IOU threshold (php.py sets this)
+            # Note: simplify.py's YoloProcessor sets these for its main model.
+            # It's good practice for PoseHeadDetector to also set them if its YOLO instance is separate.
+            logging.info(f"YOLO pose model loaded successfully from {self.model_path} on {device}")
             return model
         except Exception as e:
-            logging.error(f"Error loading pose model: {e}")
+            logging.error(f"Error loading YOLO pose model: {e}")
             return None
 
+    def update_frame_thresholds(self, fps=None):
+        """
+        Update frame thresholds based on FPS. Also resets counters and status flags.
+        This combines simplify.py's update_frame_thresholds and php.py's reset_frame_counters.
+        """
+        if fps is not None and fps > 0:
+            self.fps = fps
+        
+        self.head_turned_frames_threshold = max(1, int(self.head_turned_threshold_seconds * self.fps))
+        self.head_down_frames_threshold = max(1, int(self.head_down_threshold_seconds * self.fps))
+        
+        # Reset counters and status flags (from php.py's reset_frame_counters)
+        self.head_turned_counter = 0
+        self.head_down_counter = 0
+        self.distracted_head_turn = False
+        self.distracted_head_down = False
+        logging.debug(f"PoseHeadDetector frame thresholds updated for FPS {self.fps}: "
+                     f"Turn Thresh={self.head_turned_frames_threshold} frames, "
+                     f"Down Thresh={self.head_down_frames_threshold} frames")
+
     def process_frame(self, frame):
-        """Process a single frame to detect head pose."""
+        """
+        Process a single frame to detect head pose using logic from pose_head_detector.py.
+        Returns a dictionary with head pose information.
+        """
         if self.model is None:
-            return {"head_turned": False, "head_down": False}
-
+            logging.warning("Pose model not loaded, returning default pose.")
+            return {
+                "head_turned": False, "head_down": False,
+                "head_turned_counter": 0, "head_down_counter": 0,
+                "head_turned_threshold": self.head_turned_frames_threshold,
+                "head_down_threshold": self.head_down_frames_threshold
+            }
+        
+        frame_flag_head_turned = False
+        frame_flag_head_down = False
+            
         try:
-            # Reset per-frame flags
-            frame_flag_head_turned = False
-            frame_flag_head_down = False
-
             # Perform pose estimation
-            results = self.model(frame, verbose=False)
-
-            # Process results
+            # By default, YOLO uses its internal confidence thresholds for detection.
+            # If specific conf/iou needed for this model instance, set them on self.model after loading.
+            results = self.model(frame, verbose=False) 
+            
             if results and len(results) > 0:
-                result = results[0]
+                result_item = results[0] # Assuming single image, first result
+                
+                # Check if keypoints data is available and not empty
+                if hasattr(result_item, 'keypoints') and result_item.keypoints is not None and \
+                   hasattr(result_item.keypoints, 'data') and result_item.keypoints.data.shape[0] > 0:
+                    
+                    keypoints_data_tensor = result_item.keypoints.data[0] # Assuming first detected person
+                    keypoints_cpu = keypoints_data_tensor.cpu().numpy()
 
-                # Get keypoints from the first person detected
-                if len(result.keypoints.data) > 0:
-                    keypoints = result.keypoints.data[0].cpu().numpy()
+                    def get_kp(name): # Helper to get keypoint coords and confidence
+                        idx = self.kp_indices.get(name, -1)
+                        if idx != -1 and idx < len(keypoints_cpu):
+                            x, y, conf = keypoints_cpu[idx]
+                            # Ensure coordinates are valid before int conversion
+                            if not (np.isnan(x) or np.isnan(y)):
+                                return (int(x), int(y)), float(conf)
+                        return (0,0), 0.0
+                    
+                    nose_xy, n_conf = get_kp("nose")
+                    left_eye_xy, le_conf = get_kp("left_eye")
+                    right_eye_xy, re_conf = get_kp("right_eye")
 
-                    # Check if we have the necessary keypoints with sufficient confidence
-                    if (keypoints[self.kp_indices["nose"]][2] > self.keypoint_conf_threshold and
-                        keypoints[self.kp_indices["left_eye"]][2] > self.keypoint_conf_threshold and
-                        keypoints[self.kp_indices["right_eye"]][2] > self.keypoint_conf_threshold):
+                    if n_conf > self.keypoint_conf_threshold and \
+                       le_conf > self.keypoint_conf_threshold and \
+                       re_conf > self.keypoint_conf_threshold:
 
-                        # Get coordinates
-                        nose = keypoints[self.kp_indices["nose"]][:2]
-                        left_eye = keypoints[self.kp_indices["left_eye"]][:2]
-                        right_eye = keypoints[self.kp_indices["right_eye"]][:2]
-
-                        # Calculate eye midpoint
-                        eye_midpoint = (left_eye + right_eye) / 2
-
-                        # Check for head turn (asymmetry between eyes and nose)
-                        # Calculate distances between facial landmarks
-                        nose_to_left = np.linalg.norm(nose - left_eye)
-                        nose_to_right = np.linalg.norm(nose - right_eye)
-
-                        # Calculate ratio of distances
-                        if min(nose_to_left, nose_to_right) > 0:
-                            turn_ratio = max(nose_to_left, nose_to_right) / min(nose_to_left, nose_to_right)
-
-                            # Check if head is turned
-                            if turn_ratio > self.head_turn_ratio_threshold:
+                        # --- Head Turn Check (from pose_head_detector.py) ---
+                        eye_center_x = (left_eye_xy[0] + right_eye_xy[0]) / 2.0
+                        eye_dist_x_pixels = abs(left_eye_xy[0] - right_eye_xy[0])
+                        
+                        # Check eye_dist_x_pixels to prevent division by zero or instability if eyes are too close/same point
+                        if eye_dist_x_pixels > 5: # A small threshold for inter-eye distance
+                            nose_deviation_from_center_x = abs(nose_xy[0] - eye_center_x)
+                            if nose_deviation_from_center_x > (eye_dist_x_pixels * self.head_turn_ratio_threshold):
                                 frame_flag_head_turned = True
-
-                        # Check for head down (if shoulders are visible)
-                        if (keypoints[self.kp_indices["left_shoulder"]][2] > self.keypoint_conf_threshold and
-                            keypoints[self.kp_indices["right_shoulder"]][2] > self.keypoint_conf_threshold):
-
-                            left_shoulder = keypoints[self.kp_indices["left_shoulder"]][:2]
-                            right_shoulder = keypoints[self.kp_indices["right_shoulder"]][:2]
-                            shoulder_midpoint = (left_shoulder + right_shoulder) / 2
-
-                            # Vector from shoulder midpoint to eye midpoint
-                            up_vector = eye_midpoint - shoulder_midpoint
-                            up_vector_norm = np.linalg.norm(up_vector)
-
-                            # Vector from eye midpoint to nose
-                            gaze_vector = nose - eye_midpoint
-                            gaze_vector_norm = np.linalg.norm(gaze_vector)
-
-                            # Calculate angle between vectors if both have non-zero length
-                            if up_vector_norm > 0 and gaze_vector_norm > 0:
-                                # Normalize vectors
-                                up_vector = up_vector / up_vector_norm
-                                gaze_vector = gaze_vector / gaze_vector_norm
-
-                                # Calculate dot product and angle
-                                dot_product = np.clip(np.dot(up_vector, gaze_vector), -1.0, 1.0)
-                                angle = np.arccos(dot_product)
-
-                                # Convert to degrees
-                                angle_degrees = np.degrees(angle)
-
-                                # Check if head is down (angle > threshold)
-                                if angle_degrees > 45:
-                                    frame_flag_head_down = True
+                        
+                        # --- Head Down Check (from pose_head_detector.py) ---
+                        eye_center_y = (left_eye_xy[1] + right_eye_xy[1]) / 2.0
+                        # Use horizontal eye distance as a stable reference for scaling vertical deviation
+                        # eye_dist_x_pixels is already calculated above.
+                        
+                        if eye_dist_x_pixels > 5: # Again, ensure eyes are reasonably detected
+                            nose_vertical_drop_from_eye_center = nose_xy[1] - eye_center_y # Positive if nose is below eye center
+                            if nose_vertical_drop_from_eye_center > (eye_dist_x_pixels * self.head_down_ratio_threshold):
+                                frame_flag_head_down = True
+                    else:
+                        logging.debug("Not all required keypoints (nose, eyes) found or confident enough for pose analysis.")
+                else:
+                    logging.debug("No keypoints detected in the frame or keypoints data is empty.")
+            else:
+                logging.debug("No pose estimation results from model.")
 
             # Update temporal counters
             self.head_turned_counter = (self.head_turned_counter + 1) if frame_flag_head_turned else 0
             self.head_down_counter = (self.head_down_counter + 1) if frame_flag_head_down else 0
-
-            # Determine final status
+            
+            # Determine final status based on accumulated frames vs thresholds
             self.distracted_head_turn = self.head_turned_counter >= self.head_turned_frames_threshold
             self.distracted_head_down = self.head_down_counter >= self.head_down_frames_threshold
-
-            return {
-                "head_turned": self.distracted_head_turn,
-                "head_down": self.distracted_head_down,
-                "head_turned_counter": self.head_turned_counter,
-                "head_down_counter": self.head_down_counter,
-                "head_turned_threshold": self.head_turned_frames_threshold,
-                "head_down_threshold": self.head_down_frames_threshold
-            }
-
+            
         except Exception as e:
-            logging.error(f"Error in pose head detection: {e}")
-            return {"head_turned": False, "head_down": False}
+            # Log the full error for debugging
+            logging.exception(f"Error processing frame for head pose: {e}") 
+            # In case of error, default to not distracted
+            self.distracted_head_turn = False
+            self.distracted_head_down = False
+            # Counters might be in an intermediate state, but will be reset if the condition isn't met next frame.
+
+        return {
+            "head_turned": self.distracted_head_turn,
+            "head_down": self.distracted_head_down,
+            "head_turned_counter": self.head_turned_counter,
+            "head_down_counter": self.head_down_counter,
+            "head_turned_threshold": self.head_turned_frames_threshold,
+            "head_down_threshold": self.head_down_frames_threshold
+        }
 
 
 # Drowsiness Analyzer
@@ -586,274 +602,211 @@ class DrowsinessAnalyzer(ABC):
     def analyze(self, detection_results):
         """Analyze drowsiness based on detection metrics."""
         pass
-
-
+    
 class RateBasedAnalyzer(DrowsinessAnalyzer):
-    """Rate-based drowsiness analysis using eye closure percentage and yawn frequency."""
+    """
+    Rate-based drowsiness analysis.
+    Internal logic revised to align with drowsiness_analyzer.py for improved accuracy.
+    Output structure of 'analyze' method maintained for backward compatibility.
+    """
 
-    def __init__(self, eye_closed_percentage_threshold=5, yawn_percentage_threshold=5, normal_state_threshold=60, fps=20, max_closure_duration_threshold=0.3):
-        """Initialize with adjusted thresholds for better detection."""
-        # Keep original parameters for backward compatibility
+    def __init__(self, eye_closed_percentage_threshold=5, yawn_rate_threshold=3,
+                 normal_state_threshold=60, fps=20, max_closure_duration_threshold=0.3,
+                 minimum_yawn_threshold=1, minimum_eye_closed_threshold=3,
+                 minimum_frames_for_analysis=10):
+        """
+        Initialize with thresholds. Parameters aligned with the new core logic.
+        """
         self.eye_closed_percentage_threshold = eye_closed_percentage_threshold
-        self.yawn_percentage_threshold = yawn_percentage_threshold
+        self.yawn_rate_threshold = yawn_rate_threshold # For internal logic
         self.normal_state_threshold = normal_state_threshold
         self.fps = fps
         self.max_closure_duration_threshold = max_closure_duration_threshold
-        self.minimum_yawn_threshold = 1
-        self.minimum_eye_closed_threshold = 3
-        self.normal_state_ratio_threshold = 5
-        self.minimum_frames_for_analysis = 10
-
-        # Add new parameters from drowsiness_analyzer.py
-        # --- Score Calculation Parameters ---
-        self.perclos_scale = 1.2
-        self.duration_scale = 1.8
-        self.yawn_rate_scale = 1.5
-        self.score_cap = 2.5
-
-        # --- Weights (Balanced) ---
-        self.eye_metric_weight = 0.7  # More weight to eye metrics
-        self.yawn_metric_weight = 0.3  # Less weight to yawn metrics
-
-        # --- Non-Linear Damping Parameters ---
-        self.damping_base_factor = 0.8
-        self.damping_power = 2.5
-
-        # --- Decision Making ---
-        self.drowsiness_decision_threshold = 0.55
-
-        # --- Extreme Thresholds for Conditional Overrides ---
-        self.extreme_perclos_threshold = 45.0
-        self.extreme_duration_threshold = 1.5
-        self.extreme_yawn_rate_threshold = 15.0
-        self.override_max_normal_perc = 40.0
-
-    def _calculate_metric_score(self, value, threshold, scale):
-        """Calculates a score based on how much a value exceeds a threshold, with capping."""
-        if value > threshold and threshold > 0:
-            score = ((value - threshold) / threshold) * scale
-            return min(score, self.score_cap)
-        return 0.0
-
-    def _calculate_damping(self, normal_state_percentage):
-        """Calculates damping amount using a non-linear function."""
-        if normal_state_percentage <= 0:
-            return 0.0
-        # Damping = base * (normal_perc / 100) ^ power
-        damping_fraction = normal_state_percentage / 100.0
-        damping_amount = self.damping_base_factor * math.pow(damping_fraction, self.damping_power)
-        # Ensure damping doesn't exceed 1.0 (or slightly less to avoid zeroing out score)
-        return min(damping_amount, 0.99)
-
-    def _create_details_dict(self, perclos, duration, yawn_rate, normal_perc,
-                             p_score, dur_score, y_score, eye_score, raw_score, damping,
-                             reason, yawn_cnt, eye_closed_det_cnt, max_consec,
-                             norm_frames, tot_frames, fps):
-        """Helper function to create the details dictionary."""
-        return {
-            'eye_closed_percentage': perclos,
-            'max_closure_duration': duration,
-            'yawn_percentage': yawn_rate,
-            'normal_state_percentage': normal_perc,
-            # 'perclos_score': p_score,
-            # 'duration_score': dur_score,
-            # 'yawn_score': y_score,
-            # 'combined_eye_score_avg': eye_score,
-            # 'raw_drowsiness_score': raw_score,
-            # 'applied_damping_factor': damping,
-            'reason': reason,
-            # Raw Inputs
-            'yawn_frames': yawn_cnt,
-            'eye_closed_frames': eye_closed_det_cnt,
-            'max_consecutive_eye_closed': max_consec,
-            'normal_state_frames': norm_frames,
-            'total_frames': tot_frames,
-            'fps': fps
-        }
+        self.minimum_yawn_threshold = minimum_yawn_threshold
+        self.minimum_eye_closed_threshold = minimum_eye_closed_threshold
+        self.minimum_frames_for_analysis = minimum_frames_for_analysis
+        
+        # Original simplify.py thresholds that might be needed for populating 'details'
+        # or for calculating backward-compatible boolean flags if their logic was tied to these exact names.
+        # For instance, if the original 'is_drowsy_yawns' used 'yawn_percentage_threshold'.
+        # We'll use the new core logic for these flags, but retain original names in details.
+        # self.original_yawn_percentage_threshold = 5 # Example if needed for a specific detail field
 
     def analyze(self, detection_results):
-        """Analyze drowsiness based on detection metrics."""
-        # Extract values from detection_results
-        yawn_frames = detection_results.get('yawn_frames', 0)
-        eye_closed_frames = detection_results.get('eye_closed_frames', 0)
-        normal_state_frames = detection_results.get('normal_state_frames', 0)
-        total_frames = detection_results.get('total_frames', 0)
-        max_consecutive_eye_closed = detection_results.get('max_consecutive_eye_closed', 0)
-        fps = detection_results.get('metrics', {}).get('fps', self.fps)
+        """
+        Analyze drowsiness. Returns results with a structure compatible with the original simplify.py.
+        """
+        yawn_frames_input = detection_results.get('yawn_frames', 0)
+        eye_closed_event_count = detection_results.get('eye_closed_frames', 0)
+        normal_state_frames_input = detection_results.get('normal_state_frames', 0)
+        total_frames_input = detection_results.get('total_frames', 0)
+        max_consecutive_eye_closed_input = detection_results.get('max_consecutive_eye_closed', 0)
+        
+        current_fps = detection_results.get('metrics', {}).get('fps', self.fps)
+        if current_fps <= 0:
+            current_fps = self.fps
 
-        # Extract head pose information if available
         head_pose = detection_results.get('head_pose', {})
         is_head_turned = head_pose.get('head_turned', False)
         is_head_down = head_pose.get('head_down', False)
-        head_turned_frames = head_pose.get('head_turned_counter', 0)
-        head_down_frames = head_pose.get('head_down_counter', 0)
+        # For details, ensure these are available or set to 0 if not.
+        head_turned_frames_val = head_pose.get('head_turned_counter', 0) 
+        head_down_frames_val = head_pose.get('head_down_counter', 0)
 
-        # Skip analysis if no detections
-        if ((yawn_frames == 0 or yawn_frames is None) and
-            (eye_closed_frames == 0 or eye_closed_frames is None) and
-            (normal_state_frames == 0 or normal_state_frames is None)):
-            return {
-                'is_drowsy': None,
-                'confidence': 0.0,
-                'details': {
-                    'eye_closed_percentage': 0.0,
-                    'yawn_percentage': 0.0,
-                    'normal_state_percentage': 0.0,
-                    'reason': 'no_detection'
-                }
+        if total_frames_input < self.minimum_frames_for_analysis:
+            # Construct details for insufficient frames, matching original keys
+            details_output = {
+                'eye_closed_percentage': 0.0,
+                'max_closure_duration': 0.0,
+                'yawn_percentage': 0.0, # Original key
+                'normal_state_percentage': 0.0,
+                'reason': 'insufficient_frames',
+                'yawn_frames': yawn_frames_input,
+                'eye_closed_frames': eye_closed_event_count,
+                'max_consecutive_eye_closed': max_consecutive_eye_closed_input,
+                'normal_state_frames': normal_state_frames_input,
+                'total_frames': total_frames_input,
+                'fps': current_fps,
+                'is_drowsy_eyes': False,
+                'is_drowsy_yawns': False,
+                'is_drowsy_excessive_yawns': False,
+                'is_normal_state_high': False, # Or based on normal_state_percentage if calculable
+                'is_head_turned': is_head_turned,
+                'is_head_down': is_head_down,
+                'head_turned_frames': head_turned_frames_val,
+                'head_down_frames': head_down_frames_val,
             }
-
-        logging.info(f"Analyzing drowsiness: Yawns={yawn_frames}, Eye Closed Frames={eye_closed_frames}, "
-                    f"Max Consecutive Closed={max_consecutive_eye_closed}, "
-                    f"Normal State Frames={normal_state_frames}, Total Frames={total_frames}")
-
-        if total_frames < self.minimum_frames_for_analysis:
             return {
                 'is_drowsy': False,
                 'confidence': 0.0,
-                'details': {
-                    'eye_closed_percentage': 0.0,
-                    'yawn_percentage': 0.0,
-                    'normal_state_percentage': 0.0,
-                    'reason': 'insufficient_frames'
-                }
+                'details': details_output
             }
 
-        # Calculate metrics based on video properties
-        time_in_seconds = total_frames / fps if fps > 0 else 0
+        time_in_seconds = total_frames_input / current_fps if current_fps > 0 else 0
         time_in_minutes = time_in_seconds / 60 if time_in_seconds > 0 else 0
 
-        # Calculate percentage metrics
-        eye_closed_percentage = (eye_closed_frames / total_frames) * 100 if total_frames > 0 else 0
-        max_closure_duration = max_consecutive_eye_closed / fps if fps > 0 else 0
-        yawn_percentage = (yawn_frames / total_frames) * 100 if total_frames > 0 else 0
-        normal_state_percentage = (normal_state_frames / total_frames) * 100 if total_frames > 0 else 0
-        yawn_rate_per_minute = yawn_frames / time_in_minutes if time_in_minutes > 0 else 0
+        # Metrics for internal logic (drowsiness_analyzer.py inspired)
+        internal_eye_closed_percentage = (eye_closed_event_count / total_frames_input) * 100 if total_frames_input > 0 else 0
+        internal_max_closure_duration = max_consecutive_eye_closed_input / current_fps if current_fps > 0 else 0
+        internal_yawn_rate_per_minute = yawn_frames_input / time_in_minutes if time_in_minutes > 0 else 0
+        internal_normal_state_percentage = (normal_state_frames_input / total_frames_input) * 100 if total_frames_input > 0 else 0
 
-        # --- Check for Conditional Extreme Overrides ---
-        final_score = 0.0
-        is_drowsy = False
-        reason = "checking_extremes"
-        override_triggered = False
-
-        # Check if normal state allows overrides
-        allow_override = normal_state_percentage < self.override_max_normal_perc
-
-        if allow_override:
-            # Prioritize more reliable extreme indicators
-            if max_closure_duration >= self.extreme_duration_threshold:
-                reason = f"extreme_duration (>{self.extreme_duration_threshold}s) & low_normal ({normal_state_percentage:.1f}%)"
-                override_triggered = True
-            elif eye_closed_percentage >= self.extreme_perclos_threshold:
-                reason = f"extreme_perclos (>{self.extreme_perclos_threshold}%) & low_normal ({normal_state_percentage:.1f}%)"
-                override_triggered = True
-            elif yawn_rate_per_minute >= self.extreme_yawn_rate_threshold:
-                reason = f"extreme_yawn_rate (>{self.extreme_yawn_rate_threshold}/min) & low_normal ({normal_state_percentage:.1f}%)"
-                override_triggered = True
-
-            if override_triggered:
-                is_drowsy = True
-                # Assign a high score, bypassing normal calculation and damping
-                final_score = self.score_cap  # Use max possible score
-                logging.info(f"Conditional Drowsiness Override Triggered: {reason}")
-                details = self._create_details_dict(
-                    eye_closed_percentage, max_closure_duration, yawn_percentage, normal_state_percentage,
-                    0, 0, 0, 0, 0, 0,  # Scores/damping not applicable here
-                    reason, yawn_frames, eye_closed_frames, max_consecutive_eye_closed,
-                    normal_state_frames, total_frames, fps
-                )
-                return {'is_drowsy': True, 'confidence': final_score, 'details': details}
-
-        # --- Calculate Individual Scores (If no override) ---
-        perclos_score = self._calculate_metric_score(eye_closed_percentage, self.eye_closed_percentage_threshold, self.perclos_scale)
-        duration_score = self._calculate_metric_score(max_closure_duration, self.max_closure_duration_threshold, self.duration_scale)
-        yawn_score = self._calculate_metric_score(yawn_percentage, self.yawn_percentage_threshold, self.yawn_rate_scale)
-
-        # Combine eye scores using AVERAGE
-        combined_eye_score = (perclos_score + duration_score) / 2.0
-
-        # --- Calculate Raw Drowsiness Score ---
-        raw_drowsiness_score = (combined_eye_score * self.eye_metric_weight +
-                                yawn_score * self.yawn_metric_weight)
-
-        # --- Apply Non-Linear Normal State Damping ---
-        damping_amount = self._calculate_damping(normal_state_percentage)
-
-        final_score = raw_drowsiness_score * (1.0 - damping_amount)
-        final_score = max(0.0, min(final_score, self.score_cap))  # Ensure score stays within [0, score_cap]
-
-        # --- Make Final Drowsiness Decision ---
-        is_drowsy = final_score >= self.drowsiness_decision_threshold
-
-        # --- Determine Reason ---
-        if is_drowsy:
-            # Check contributions before damping to see what pushed it over
-            eye_contribution = combined_eye_score * self.eye_metric_weight
-            yawn_contribution = yawn_score * self.yawn_metric_weight
-            # Use a slightly larger tolerance or relative comparison if needed
-            if eye_contribution > yawn_contribution + 0.05:
-                reason = f"eye_metrics_dominant (Score: {final_score:.2f})"
-            elif yawn_contribution > eye_contribution + 0.05:
-                reason = f"yawn_metrics_dominant (Score: {final_score:.2f})"
-            else:
-                # Check if only one metric was non-zero
-                if combined_eye_score > 0 and yawn_score == 0:
-                    reason = f"eye_metrics_only (Score: {final_score:.2f})"
-                elif yawn_score > 0 and combined_eye_score == 0:
-                    reason = f"yawn_metrics_only (Score: {final_score:.2f})"
-                else:
-                    reason = f"combined_metrics_threshold_met (Score: {final_score:.2f})"
-        elif final_score > 0:
-            reason = f"indicators_present_below_threshold (Score: {final_score:.2f})"
-        else:
-            # Reached here means final_score is 0
-            if raw_drowsiness_score > 0:  # Was non-zero before damping
-                reason = f"indicators_damped_to_zero (Raw: {raw_drowsiness_score:.2f}, Damp: {damping_amount:.2f})"
-            else:  # Raw score was already zero
-                reason = "no_significant_indicators"
-
-        # For backward compatibility, check head pose override
-        # Check if head is in a distracted position (either turned or down)
-        is_head_distracted = is_head_turned or is_head_down
-
-        if is_head_distracted and is_drowsy:
-            is_drowsy = False
-            reason = 'head_pose_override'
-            logging.info(f"Head pose override: Head turned={is_head_turned}, Head down={is_head_down}")
-
-        # --- Format Results ---
-        details = self._create_details_dict(
-            eye_closed_percentage, max_closure_duration, yawn_percentage, normal_state_percentage,
-            perclos_score, duration_score, yawn_score, combined_eye_score,
-            raw_drowsiness_score, damping_amount, reason,
-            yawn_frames, eye_closed_frames, max_consecutive_eye_closed,
-            normal_state_frames, total_frames, fps
+        # Drowsiness indicators for internal logic
+        internal_is_drowsy_eyes = (
+            (internal_eye_closed_percentage > self.eye_closed_percentage_threshold) or
+            (internal_max_closure_duration > self.max_closure_duration_threshold) or
+            (eye_closed_event_count >= self.minimum_eye_closed_threshold)
         )
+        internal_is_drowsy_yawns = (
+            (yawn_frames_input >= self.minimum_yawn_threshold) and
+            (internal_yawn_rate_per_minute > self.yawn_rate_threshold)
+        )
+        # Heuristic for excessive yawns based on drowsiness_analyzer.py
+        # Adjust 10 if yawn_frames_input (frames) is very different from yawn_count (events)
+        # Example: if a yawn event lasts avg 2 sec at 20fps (40 frames), 10 events = 400 frames.
+        # Or keep it simpler:
+        internal_is_drowsy_excessive_yawns = (yawn_frames_input > (10 * current_fps * 0.5) ) or (internal_yawn_rate_per_minute > 100) # ~10 events, assuming 0.5s of detected frames per event average
 
-        # Add backward compatibility fields
-        details.update({
-            'is_drowsy_eyes': eye_closed_percentage > self.eye_closed_percentage_threshold or
-                             max_closure_duration > self.max_closure_duration_threshold or
-                             eye_closed_frames >= self.minimum_eye_closed_threshold,
-            'is_drowsy_yawns': yawn_frames >= self.minimum_yawn_threshold and
-                              yawn_percentage > self.yawn_percentage_threshold,
-            'is_drowsy_excessive_yawns': yawn_frames > 10 or yawn_percentage > 20,
-            'is_normal_state_high': normal_state_percentage >= self.normal_state_threshold,
+        internal_is_normal_state_high = internal_normal_state_percentage >= self.normal_state_threshold
+
+        # Core drowsiness decision logic (inspired by drowsiness_analyzer.py)
+        final_is_drowsy = False
+        final_confidence = 0.0
+        reason_for_drowsiness = ''
+
+        if internal_is_drowsy_excessive_yawns:
+            final_is_drowsy = True
+            final_confidence = 1.0
+            reason_for_drowsiness = 'excessive_yawns'
+        elif internal_is_drowsy_yawns and internal_yawn_rate_per_minute > 60:
+             final_is_drowsy = True
+             final_confidence = 0.8
+             reason_for_drowsiness = 'high_yawn_rate'
+        elif internal_is_normal_state_high and not (internal_is_drowsy_yawns or internal_is_drowsy_eyes):
+            final_is_drowsy = False
+            final_confidence = 0.1 # Small confidence even if not drowsy, if normal state is high
+            reason_for_drowsiness = 'high_normal_state_no_other_indicators'
+        else:
+            if is_head_turned or is_head_down: # Head pose override
+                final_is_drowsy = False
+                final_confidence = 0.0 # Or a small confidence indicating distraction
+                reason_for_drowsiness = 'head_pose_override'
+            else:
+                final_is_drowsy = internal_is_drowsy_eyes or internal_is_drowsy_yawns
+
+            # Confidence calculation
+            eye_perc_conf = min(internal_eye_closed_percentage / self.eye_closed_percentage_threshold, 1.0) if self.eye_closed_percentage_threshold > 0 and internal_eye_closed_percentage > 0 else 0
+            eye_dur_conf = min(internal_max_closure_duration / self.max_closure_duration_threshold, 1.0) if self.max_closure_duration_threshold > 0 and internal_max_closure_duration > 0 else 0
+            eye_count_conf = min(eye_closed_event_count / self.minimum_eye_closed_threshold, 1.0) if self.minimum_eye_closed_threshold > 0 and eye_closed_event_count > 0 else 0
+            
+            current_eye_confidence = max(eye_perc_conf, eye_dur_conf, eye_count_conf)
+            
+            current_yawn_confidence = 0
+            if self.minimum_yawn_threshold > 0 and yawn_frames_input >= self.minimum_yawn_threshold and internal_yawn_rate_per_minute > self.yawn_rate_threshold:
+                 current_yawn_confidence = min(yawn_frames_input / self.minimum_yawn_threshold, 1.0) # Based on input count vs min count
+
+            calculated_confidence = max(current_eye_confidence, current_yawn_confidence)
+
+            if internal_normal_state_percentage > 0:
+                normal_state_factor = (1 - (internal_normal_state_percentage / 100)) ** 2
+                calculated_confidence *= normal_state_factor
+            
+            final_confidence = calculated_confidence
+
+            if not reason_for_drowsiness: # If not set by head_pose_override
+                reason_for_drowsiness = 'drowsy_indicators_present' if final_is_drowsy else 'no_significant_indicators'
+
+            if final_is_drowsy and final_confidence < 0.15:
+                final_is_drowsy = False
+                reason_for_drowsiness = 'low_confidence_override'
+        
+        final_confidence = max(0.0, min(final_confidence, 1.0))
+
+        # --- Construct details dictionary for backward compatibility ---
+        # Calculate metrics for output details using original key names
+        output_eye_closed_percentage = internal_eye_closed_percentage # Uses event-based calculation
+        output_max_closure_duration = internal_max_closure_duration
+        # For 'yawn_percentage', use the original calculation if different from internal logic.
+        output_yawn_percentage = (yawn_frames_input / total_frames_input) * 100 if total_frames_input > 0 else 0
+        output_normal_state_percentage = internal_normal_state_percentage
+
+        details_output = {
+            'eye_closed_percentage': output_eye_closed_percentage,
+            'max_closure_duration': output_max_closure_duration,
+            'yawn_percentage': output_yawn_percentage, # Original key, original calculation
+            'normal_state_percentage': output_normal_state_percentage,
+            'reason': reason_for_drowsiness,
+            'yawn_frames': yawn_frames_input,
+            'eye_closed_frames': eye_closed_event_count, # Event count
+            'max_consecutive_eye_closed': max_consecutive_eye_closed_input, # In frames
+            'normal_state_frames': normal_state_frames_input,
+            'total_frames': total_frames_input,
+            'fps': current_fps,
+            # Boolean flags based on new internal logic
+            'is_drowsy_eyes': internal_is_drowsy_eyes,
+            'is_drowsy_yawns': internal_is_drowsy_yawns,
+            'is_drowsy_excessive_yawns': internal_is_drowsy_excessive_yawns,
+            'is_normal_state_high': internal_is_normal_state_high,
             'is_head_turned': is_head_turned,
             'is_head_down': is_head_down,
-            'head_turned_frames': head_turned_frames,
-            'head_down_frames': head_down_frames
-        })
-
-        result = {
-            'is_drowsy': is_drowsy,
-            'confidence': final_score,
-            'details': details
+            'head_turned_frames': head_turned_frames_val,
+            'head_down_frames': head_down_frames_val,
+            # Add any other fields from original 'details' if they were simple pass-throughs
+            # or calculated in a way that's still relevant and non-breaking.
+            # OMITTING fields like 'perclos_score', 'raw_drowsiness_score' from the old complex system.
         }
+        
+        logging.info(
+            f"RateBasedAnalyzer (simplify.py compat) output: "
+            f"is_drowsy:{final_is_drowsy}, confidence:{final_confidence:.2f}, "
+            f"reason:{reason_for_drowsiness}"
+        )
 
-        logging.info(f"Analysis result: {result}")
-        return result
-
+        return {
+            'is_drowsy': final_is_drowsy,
+            'confidence': final_confidence,
+            'details': details_output
+        }
 
 def create_analyzer(analyzer_type="rate"):
     """Create and return a drowsiness analyzer instance."""
@@ -863,123 +816,62 @@ def create_analyzer(analyzer_type="rate"):
         raise ValueError(f"Unknown analyzer type: {analyzer_type}")
 
 
-# YOLO Processor
 class YoloProcessor:
-    """Processes videos with YOLO model for drowsiness detection."""
-
-    def __init__(self, model_path=YOLO_MODEL_PATH):
+    def __init__(self, model_path=None): # Use global YOLO_MODEL_PATH if None
+        if model_path is None:
+            model_path = os.getenv("YOLO_MODEL_PATH", "models/jingyeong-best.pt") # Match simplify.py global
+        
         self.model_path = model_path
-        # Load environment variables
-        self.use_cuda = USE_CUDA
-        # Extract model name from the path
-        self.model_name = os.path.basename(model_path)
+        self.use_cuda = os.getenv('USE_CUDA', 'true').lower() == 'true' # Match simplify.py global
+        self.model_name = os.path.basename(self.model_path)
         self.model = self.load_model()
-        # Add parameters for eye detection tuning
-        self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '1'))
-        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '2'))  # Frames to wait before counting next blink
+
+        # Confidence thresholds from simplify.py (can be tuned)
         self.eye_closed_confidence = float(os.getenv('EYE_CLOSED_CONFIDENCE', '0.6'))
         self.yawn_confidence = float(os.getenv('YAWN_CONFIDENCE', '0.6'))
         self.normal_state_confidence = float(os.getenv('NORMAL_STATE_CONFIDENCE', '0.6'))
-        # Initialize pose detector
+
+        # Blink detection parameters (consider aligning with yolo_processor.py if those values are better)
+        self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '1'))  # yolo_processor.py uses 1
+        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '2'))    # yolo_processor.py uses 2
+
+        # Initialize pose detector (simplify.py's PoseHeadDetector is used)
+        # It sources its own model path via os.getenv("POSE_MODEL_PATH", "yolov8l-pose.pt")
         self.pose_detector = PoseHeadDetector()
-        # Counters for consecutive frames
-        self.consecutive_eye_closed = 0
-        self.max_consecutive_eye_closed = 0
-        # Tracking variables
-        self.current_fps = 20  # Default FPS
-        self.total_frames = 0
-        self.eye_closed_frames = 0
-        self.yawn_frames = 0
-        self.normal_state_frames = 0
-        # Metrics
-        self.metrics = {}
+        
+        # Initialize instance variables that will be reset by reset_counters()
+        self.reset_counters()
+
 
     def load_model(self):
         """Loads and returns a YOLO model for drowsiness detection."""
-        logging.info("Loading YOLO model...")
+        logging.info(f"Loading YOLO model from {self.model_path}...")
         try:
-            # Check if CUDA is available and enabled
             cuda_available = torch.cuda.is_available()
             device = 'cuda' if (cuda_available and self.use_cuda) else 'cpu'
-            logging.info(f"CUDA available: {cuda_available}, Using device: {device}")
+            logging.info(f"YOLO model: CUDA available: {cuda_available}, Using device: {device}")
 
-            # Load the model
             model = YOLO(self.model_path)
-
-            # Move model to appropriate device
             model.to(device)
-
-            # Set model parameters for inference
-            model.conf = 0.25  # Confidence threshold
-            model.iou = 0.45   # NMS IOU threshold
-
-            if device == 'cuda':
-                # Enable CUDA optimizations
-                torch.backends.cudnn.benchmark = True
-                torch.backends.cudnn.deterministic = False
-                # Set CUDA stream
-                torch.cuda.set_stream(torch.cuda.Stream())
-
-            logging.info(f"Model loaded successfully from {self.model_path}")
+            # Set common inference parameters (adjust if needed)
+            # model.conf = 0.25  # General confidence threshold for detection
+            # model.iou = 0.45   # NMS IOU threshold
+            logging.info(f"YOLO model loaded successfully from {self.model_path} on {device}")
             return model
         except Exception as e:
-            logging.error(f"Error loading model: {e}")
+            logging.error(f"Error loading YOLO model: {e}")
             return None
 
-    def reset_counters(self):
-        """Reset all counters for a new video processing session."""
-        self.consecutive_eye_closed = 0
-        self.max_consecutive_eye_closed = 0
-        self.total_frames = 0
-        self.eye_closed_frames = 0
-        self.yawn_frames = 0
-        self.normal_state_frames = 0
-        self.blink_cooldown_counter = 0
-        self.potential_blink_frames = 0
-        self.metrics = {}
-
-    def process_frame(self, frame):
-        """Process a single frame with YOLO model."""
-        try:
-            # Ensure minimum frame size and proper aspect ratio
-            min_size = 640
-            height, width = frame.shape[:2]
-            if height < min_size or width < min_size:
-                scale = max(min_size/width, min_size/height)
-                frame = cv2.resize(frame, None, fx=scale, fy=scale)
-
-            # Apply image enhancement
-            frame = cv2.convertScaleAbs(frame, alpha=1.2, beta=10)
-
-            # Process with main YOLO model
-            results = self.model(frame, verbose=False)
-
-            # Process with pose detector
-            pose_results = self.pose_detector.process_frame(frame)
-
-            if not results:
-                return None
-
-            # Return a dictionary with both results
-            return {
-                'detection_results': results,
-                'pose_results': pose_results
-            }
-        except Exception as e:
-            logging.error(f"Error processing frame: {e}")
-            return None
-
-    def download_video(self, video_url, temp_path="temp_video.mp4"):
+    def download_video(self, video_url, temp_path="temp_video.mp4"): # Matching simplify.py's signature
         """Download video from URL to a temporary file."""
+        # Using simplify.py's existing robust download_video logic
         try:
-            # Create a hash of the URL to use as a unique filename
             url_hash = hashlib.md5(video_url.encode()).hexdigest()
             temp_path = f"temp_{url_hash}.mp4"
 
-            # If file exists but is very small (likely corrupted), remove it
             if os.path.exists(temp_path):
                 file_size = os.path.getsize(temp_path)
-                if file_size < 1024:  # Less than 1KB
+                if file_size < 1024:
                     logging.warning(f"Found existing but potentially corrupted video file (size: {file_size} bytes). Removing it.")
                     os.remove(temp_path)
                 else:
@@ -987,34 +879,23 @@ class YoloProcessor:
                     return temp_path
 
             logging.info(f"Downloading video from {video_url}")
-            response = requests.get(video_url, stream=True, timeout=30)  # Add timeout
-            response.raise_for_status()  # Raise an exception for HTTP errors
-
-            # Check content type to ensure it's a video
+            response = requests.get(video_url, stream=True, timeout=30)
+            response.raise_for_status()
             content_type = response.headers.get('content-type', '')
             if not ('video' in content_type or 'octet-stream' in content_type):
                 logging.warning(f"Content type '{content_type}' may not be a video")
 
-            # Get content length if available
-            content_length = response.headers.get('content-length')
-            if content_length:
-                content_length = int(content_length)
-                logging.info(f"Video file size: {content_length / 1024:.2f} KB")
-
-            # Save the video to a temporary file
             with open(temp_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
 
-            # Verify the downloaded file
             if os.path.exists(temp_path):
                 file_size = os.path.getsize(temp_path)
-                if file_size < 1024:  # Less than 1KB
+                if file_size < 1024:
                     logging.error(f"Downloaded file is too small ({file_size} bytes), likely corrupted")
-                    os.remove(temp_path)
+                    self._cleanup_temp_file(temp_path) # Use consistent cleanup
                     return None
                 logging.info(f"Successfully downloaded video to {temp_path} (size: {file_size / 1024:.2f} KB)")
-
             return temp_path
         except requests.exceptions.Timeout:
             logging.error(f"Timeout while downloading video from {video_url}")
@@ -1024,193 +905,260 @@ class YoloProcessor:
             return None
         except Exception as e:
             logging.error(f"Error downloading video: {e}")
+            if 'temp_path' in locals() and os.path.exists(temp_path): # Ensure cleanup on other exceptions
+                self._cleanup_temp_file(temp_path)
             return None
 
-    def process_video(self, video_url):
-        """Process a video for drowsiness detection."""
-        # Reset counters for new video
-        self.reset_counters()
 
-        # Download the video
+    def process_frame(self, frame):
+        """Process a single frame with YOLO model and PoseHeadDetector."""
+        try:
+            min_size = 640 # Standard processing size
+            height, width = frame.shape[:2]
+            if height < min_size or width < min_size: # Upscale if too small
+                scale = max(min_size/width, min_size/height)
+                frame = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+            
+            # Image enhancement (from both simplify.py and yolo_processor.py)
+            frame = cv2.convertScaleAbs(frame, alpha=1.2, beta=10)
+
+            yolo_model_outputs = self.model(frame, verbose=False) 
+            pose_detector_outputs = self.pose_detector.process_frame(frame)
+
+            if not yolo_model_outputs: # No YOLO detections
+                # Still return pose if available, or None if pose also failed.
+                # For consistency with simplify.py, if yolo fails, frame processing failed.
+                return None 
+            
+            return {
+                'detection_results': yolo_model_outputs, # List of ultralytics.engine.results.Results
+                'pose_results': pose_detector_outputs  # Dict from PoseHeadDetector
+            }
+        except Exception as e:
+            logging.error(f"Error processing frame: {e}")
+            return None
+
+    def reset_counters(self):
+        """Reset all relevant counters for a new video processing session."""
+        # Counters from original simplify.py
+        self.consecutive_eye_closed = 0
+        self.max_consecutive_eye_closed = 0 
+        self.eye_closed_frames = 0      # Blink/closure EVENTS
+        self.yawn_frames = 0            # FRAMES with any yawn detection
+        self.normal_state_frames = 0    # FRAMES with any normal state detection
+        self.blink_cooldown_counter = 0 
+        self.potential_blink_frames = 0 
+        
+        # Video properties to be set per video
+        self.total_frames_from_video_file = 0 
+        self.current_video_fps = 20 # Default, to be updated
+
+        # These are effectively local to process_video but defined here for clarity if needed by other methods
+        # self.yawn_detections_count_current_video = 0
+        # self.total_eye_closed_duration_frames_current_video = 0
+
+
+    def _cleanup_temp_file(self, file_path):
+        """Safely remove a temporary file."""
+        try:
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+                logging.debug(f"Removed temporary video file: {file_path}")
+        except Exception as e:
+            logging.warning(f"Error removing temporary file {file_path}: {e}")
+
+    def process_video(self, video_url):
+        """
+        Process a video for drowsiness detection.
+        Output structure is kept compatible with original simplify.py,
+        with necessary additions for improved analysis.
+        """
+        self.reset_counters() 
+
         temp_video_path = self.download_video(video_url)
         if not temp_video_path:
-            logging.error("Failed to download video")
-            return False, {}
+            return False, {'error': 'Failed to download video', 'reason': 'Download process failed or returned None'}
 
         try:
-            # Open the video file
             cap = cv2.VideoCapture(temp_video_path)
             if not cap.isOpened():
                 logging.error(f"Error opening video file: {temp_video_path}")
-                # Clean up the file if it can't be opened
-                try:
-                    if os.path.exists(temp_video_path):
-                        os.remove(temp_video_path)
-                        logging.info(f"Removed corrupted video file: {temp_video_path}")
-                except Exception as e:
-                    logging.warning(f"Failed to remove corrupted video file: {e}")
-                return False, {}
+                self._cleanup_temp_file(temp_video_path)
+                return False, {'error': f'Error opening video file: {temp_video_path}'}
 
-            # Get video properties
-            self.total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            self.current_fps = cap.get(cv2.CAP_PROP_FPS)
+            self.total_frames_from_video_file = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            self.current_video_fps = cap.get(cv2.CAP_PROP_FPS)
 
-            # Log video properties for debugging
-            logging.info(f"Video properties - FPS: {self.current_fps}, Total frames: {self.total_frames}")
-
-            # Validate video properties
-            if self.total_frames <= 0 or self.current_fps <= 0:
-                logging.error(f"Invalid video properties - FPS: {self.current_fps}, Total frames: {self.total_frames}")
+            if self.total_frames_from_video_file <= 0 :
+                logging.error(f"Invalid video properties: Total frames {self.total_frames_from_video_file}")
                 cap.release()
-                # Clean up the file if it has invalid properties
-                try:
-                    if os.path.exists(temp_video_path):
-                        os.remove(temp_video_path)
-                        logging.info(f"Removed video file with invalid properties: {temp_video_path}")
-                except Exception as e:
-                    logging.warning(f"Failed to remove video file with invalid properties: {e}")
-                return False, {}
+                self._cleanup_temp_file(temp_video_path)
+                return False, {'error': 'Invalid video properties (total frames zero or negative)'}
+            if self.current_video_fps <= 0:
+                logging.warning(f"Invalid video FPS {self.current_video_fps}, using default 20 FPS.")
+                self.current_video_fps = 20 
 
-            # Use default FPS if needed
-            if self.current_fps <= 0:
-                self.current_fps = 20  # Default FPS if not available
-                logging.warning(f"Using default FPS value: {self.current_fps}")
+            self.pose_detector.update_frame_thresholds(self.current_video_fps)
 
-            # Update pose detector FPS
-            self.pose_detector.update_frame_thresholds(self.current_fps)
+            # Local accumulators for metrics specific to yolo_processor.py's enhanced calculations
+            yawn_detections_count_current_video = 0
+            total_eye_closed_duration_frames_current_video = 0
+            
+            processed_frames_count = 0 
+            video_processing_start_time = time.time()
 
-            # Process frames
-            frame_count = 0
-            start_time = time.time()
+            # Frame skipping logic from yolo_processor.py (targets ~10 FPS processing)
+            frame_skip_interval = max(1, int(self.current_video_fps / 10))
+            current_frame_index_in_video = -1
 
             while True:
                 ret, frame = cap.read()
                 if not ret:
                     break
+                current_frame_index_in_video += 1
 
-                frame_count += 1
-
-                # Skip frames for faster processing (process every 2nd frame)
-                if frame_count % 2 != 0:
+                if current_frame_index_in_video % frame_skip_interval != 0:
+                    continue
+                
+                if frame is None or frame.size == 0: # Additional check
+                    logging.warning(f"Skipping empty frame at index {current_frame_index_in_video}")
                     continue
 
-                # Process the frame
-                result = self.process_frame(frame)
-                if result is None:
+                processed_frames_count += 1
+                frame_analysis_result = self.process_frame(frame)
+
+                if frame_analysis_result is None:
                     continue
 
-                # Extract results
-                detection_results = result['detection_results']
-                pose_results = result['pose_results']
+                yolo_outputs_list = frame_analysis_result['detection_results'] # List of Results objects
+                pose_info_dict = frame_analysis_result['pose_results']    # Dict from PoseHeadDetector
 
-                # Update head pose information
-                is_head_turned = pose_results.get('head_turned', False)
-                is_head_down = pose_results.get('head_down', False)
+                frame_had_yawn_detected = False
+                frame_had_eye_closed_detected = False
+                # frame_had_normal_state_detected = False # Not strictly needed for counters if +=1 is per detection
 
-                # Process YOLO detection results
-                if len(detection_results) > 0:
-                    # Get the first result (assuming single image input)
-                    detection_result = detection_results[0]
+                if yolo_outputs_list and len(yolo_outputs_list) > 0:
+                    # Typically, for single frame processing, yolo_outputs_list contains one Results object
+                    yolo_result_item = yolo_outputs_list[0]
+                    
+                    # Check if boxes attribute exists and is not None
+                    if hasattr(yolo_result_item, 'boxes') and yolo_result_item.boxes is not None:
+                        boxes = yolo_result_item.boxes
+                        # Further check if cls and conf attributes exist
+                        cls_ids = boxes.cls.cpu().numpy().astype(int) if hasattr(boxes, 'cls') and boxes.cls is not None else np.array([], dtype=int)
+                        confs = boxes.conf.cpu().numpy() if hasattr(boxes, 'conf') and boxes.conf is not None else np.array([], dtype=float)
 
-                    # Check for detections
-                    if len(detection_result.boxes) > 0:
-                        # Get class IDs and confidences
-                        cls_ids = detection_result.boxes.cls.cpu().numpy().astype(int)
-                        confs = detection_result.boxes.conf.cpu().numpy()
-
-                        # Check for eye closed detection
-                        eye_closed_detected = False
+                        # Normal State (class 1)
                         for i, cls_id in enumerate(cls_ids):
-                            if cls_id == 0 and confs[i] >= self.eye_closed_confidence:  # Assuming class 0 is 'eye_closed'
-                                eye_closed_detected = True
-                                self.consecutive_eye_closed += 1
-                                self.potential_blink_frames += 1
-                                break
+                            if cls_id == 1 and confs[i] >= self.normal_state_confidence:
+                                self.normal_state_frames += 1 # simplify.py original logic: count frames with normal state
+                                # frame_had_normal_state_detected = True # Not strictly needed if only counting once per frame
+                                break 
+                        
+                        # Yawn (class 2)
+                        current_frame_yawn_detections = 0
+                        for i, cls_id in enumerate(cls_ids):
+                            if cls_id == 2 and confs[i] >= self.yawn_confidence:
+                                current_frame_yawn_detections += 1
+                                frame_had_yawn_detected = True
+                        yawn_detections_count_current_video += current_frame_yawn_detections
+                        if frame_had_yawn_detected:
+                            self.yawn_frames += 1 # simplify.py original: count frames with any yawn
 
-                        if eye_closed_detected:
-                            # Count eye closed events if we have enough consecutive frames and not in cooldown
+                        # Closed Eyes (class 0)
+                        num_confident_closed_eyes_this_frame = 0
+                        for i, cls_id in enumerate(cls_ids):
+                            if cls_id == 0 and confs[i] >= self.eye_closed_confidence:
+                                num_confident_closed_eyes_this_frame += 1
+                        
+                        if num_confident_closed_eyes_this_frame > 0:
+                            frame_had_eye_closed_detected = True
+                            total_eye_closed_duration_frames_current_video += 1 # Crucial new metric
+                            self.potential_blink_frames += 1
+                            self.consecutive_eye_closed += 1
+                        else: # Eyes not detected as closed in this frame
                             if self.potential_blink_frames >= self.min_blink_frames and self.blink_cooldown_counter == 0:
-                                self.eye_closed_frames += 1
+                                self.eye_closed_frames += 1 # Count ended blink event
                                 self.blink_cooldown_counter = self.blink_cooldown
-                                logging.info(f"Eye closure detected with confidence")
-                        else:
-                            # Even when eyes are no longer detected as closed, if we had enough frames
-                            # to consider it a valid eye closure, count it
-                            if self.potential_blink_frames >= self.min_blink_frames and self.blink_cooldown_counter == 0:
-                                self.eye_closed_frames += 1
-                                self.blink_cooldown_counter = self.blink_cooldown
-                                logging.info("Eye closure event counted after detection ended")
                             self.potential_blink_frames = 0
                             self.consecutive_eye_closed = 0
+                        
+                        if self.consecutive_eye_closed > self.max_consecutive_eye_closed:
+                            self.max_consecutive_eye_closed = self.consecutive_eye_closed
+                        
+                        # Blink event detection (if eyes were closed and conditions met)
+                        if frame_had_eye_closed_detected and \
+                           self.potential_blink_frames >= self.min_blink_frames and \
+                           self.blink_cooldown_counter == 0:
+                            self.eye_closed_frames += 1 # Count event
+                            self.blink_cooldown_counter = self.blink_cooldown
+                    else:
+                        logging.debug(f"Frame {current_frame_index_in_video}: No 'boxes' in yolo_result_item or it's None.")
+                else:
+                    logging.debug(f"Frame {current_frame_index_in_video}: No YOLO outputs or empty list.")
 
-                        # Decrement cooldown counter if active
-                        if self.blink_cooldown_counter > 0:
-                            self.blink_cooldown_counter -= 1
+                if self.blink_cooldown_counter > 0:
+                    self.blink_cooldown_counter -= 1
+            
+            # After loop, check for any pending blink event
+            if self.potential_blink_frames >= self.min_blink_frames and self.blink_cooldown_counter == 0:
+                self.eye_closed_frames += 1
 
-                        # Update max consecutive eye closed frames
-                        self.max_consecutive_eye_closed = max(self.max_consecutive_eye_closed, self.consecutive_eye_closed)
-
-                        # Check for yawn detection
-                        for i, cls_id in enumerate(cls_ids):
-                            if cls_id == 2 and confs[i] >= self.yawn_confidence:  # Assuming class 2 is 'yawn'
-                                self.yawn_frames += 1
-                                break
-
-                        # Check for normal state detection
-                        for i, cls_id in enumerate(cls_ids):
-                            if cls_id == 1 and confs[i] >= self.normal_state_confidence:  # Assuming class 1 is 'normal'
-                                self.normal_state_frames += 1
-                                break
-
-            # Calculate processing time
-            process_time = time.time() - start_time
-
-            # Close the video file
             cap.release()
+            video_processing_duration_seconds = time.time() - video_processing_start_time
 
-            # Prepare detection results
-            detection_results = {
+            # --- Construct the output dictionary ---
+            # This structure must be compatible with what the third-party platform expects from simplify.py
+            
+            # Head pose dict now includes counters for the analyzer
+            output_head_pose_dict = {
+                'head_turned': pose_info_dict.get('head_turned', False),
+                'head_down': pose_info_dict.get('head_down', False),
+                'head_turned_counter': pose_info_dict.get('head_turned_counter', 0),
+                'head_down_counter': pose_info_dict.get('head_down_counter', 0),
+                'head_turned_threshold': pose_info_dict.get('head_turned_threshold', 0), # For context
+                'head_down_threshold': pose_info_dict.get('head_down_threshold', 0)   # For context
+            }
+
+            final_detection_results = {
+                # --- Original simplify.py keys ---
                 'yawn_frames': self.yawn_frames,
                 'eye_closed_frames': self.eye_closed_frames,
                 'max_consecutive_eye_closed': self.max_consecutive_eye_closed,
                 'normal_state_frames': self.normal_state_frames,
-                'total_frames': self.total_frames,
+                'total_frames': self.total_frames_from_video_file, # Total frames in original video
+
                 'metrics': {
-                    'fps': self.current_fps,
-                    'process_time': process_time,
-                    'processed_frames': frame_count,
-                    'consecutive_eye_closed': self.consecutive_eye_closed,
-                    'potential_blink_frames': self.potential_blink_frames,
-                    'processed_frame_ratio': frame_count / self.total_frames if self.total_frames > 0 else 0
+                    'fps': self.current_video_fps,
+                    'process_time': video_processing_duration_seconds,
+                    'processed_frames': processed_frames_count,
+                    'consecutive_eye_closed': self.consecutive_eye_closed, # Value at end of processing
+                    'potential_blink_frames': self.potential_blink_frames, # Value at end of processing
+                    'processed_frame_ratio': processed_frames_count / self.total_frames_from_video_file if self.total_frames_from_video_file > 0 else 0
                 },
-                'head_pose': {
-                    'head_turned': is_head_turned,
-                    'head_down': is_head_down
-                }
+                'head_pose': output_head_pose_dict,
+
+                # --- Necessary ADDITIONS for improved RateBasedAnalyzer ---
+                # These keys are new. If this breaks the third-party platform,
+                # then RateBasedAnalyzer cannot be improved in the way that uses these metrics.
+                'total_eye_closed_duration_frames': total_eye_closed_duration_frames_current_video,
+                'yawn_detections_count': yawn_detections_count_current_video,
+
+                # --- Optional informational additions (from yolo_processor.py) ---
+                'model_name': self.model_name,
+                # 'processing_status': 'processed' # Can be added if useful
             }
-
-            logging.info(f"Video processing complete: {detection_results}")
-
-            # Clean up temporary file
-            try:
-                if os.path.exists(temp_video_path):
-                    os.remove(temp_video_path)
-                    logging.info(f"Removed temporary video file: {temp_video_path}")
-            except Exception as e:
-                logging.warning(f"Error removing temporary file: {e}")
-
-            return True, detection_results
+            
+            logging.info(f"Video processing complete (YoloProcessor enhanced). Results: {final_detection_results}")
+            self._cleanup_temp_file(temp_video_path)
+            return True, final_detection_results
 
         except Exception as e:
-            logging.error(f"Error processing video: {e}")
-            # Clean up temporary file
-            try:
-                if os.path.exists(temp_video_path):
-                    os.remove(temp_video_path)
-            except:
-                pass
-            return False, {}
-
+            logging.exception(f"Critical error in YoloProcessor.process_video: {e}") # Use .exception for stack trace
+            if 'cap' in locals() and cap.isOpened():
+                cap.release()
+            self._cleanup_temp_file(temp_video_path)
+            return False, {'error': str(e), 'reason': 'Exception during video processing'}
 
 # Initialize components
 db_manager = DatabaseManager()
