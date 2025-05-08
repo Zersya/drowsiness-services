@@ -351,11 +351,11 @@ def index():
                 COALESCE(SUM(CASE WHEN is_drowsy = 1 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as take_false_positives,
                 COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as take_true_negatives,
                 COALESCE(SUM(CASE WHEN is_drowsy = 0 AND takeType = 0 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as take_false_negatives,
-                -- Review Type vs Take Type metrics (only processed records)
+                -- Review Type vs Take Type metrics (only processed records) - CORRECTED
                 COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 0 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_true_positives,
-                COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 0 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_false_positives,
+                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_false_positives,
                 COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_true_negatives,
-                COALESCE(SUM(CASE WHEN review_type = 0 AND takeType = 1 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_false_negatives,
+                COALESCE(SUM(CASE WHEN review_type = 1 AND takeType = 0 AND processing_status = 'processed' THEN 1 ELSE 0 END), 0) as review_false_negatives, 
                 -- Our Type vs Take Type metrics (based on alarm_type_value and detection values)
                 -- Only include records where takeType is not NULL and processing_status = 'processed'
                 COALESCE(SUM(CASE
