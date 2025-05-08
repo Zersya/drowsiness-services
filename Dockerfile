@@ -26,8 +26,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install additional dependencies that might be needed for simplify.py
 RUN pip install --no-cache-dir opencv-python-headless
 
-# Copy application code
-COPY simplify.py .
+# Copy all files in project
+COPY . .
 
 # Create directories
 RUN mkdir -p models logs data
@@ -50,7 +50,12 @@ ENV POSE_MODEL_PATH=models/yolov8l-pose.pt
 ENV USE_CUDA=true
 # Use first GPU
 ENV CUDA_VISIBLE_DEVICES=0
-ENV SIMPLIFY_PORT=8002
+
+# Define ports for each application
+# Ensure these environment variables are used by your Python applications to bind to the correct ports
+ENV WEB_SERVER_PORT=8000         
+ENV SIMPLIFY_PORT=8002           
+
 # Configure ThreadPool settings
 # Number of concurrent video processing workers
 ENV MAX_WORKERS=4
@@ -64,8 +69,11 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Ensure Python output is unbuffered for better logging
 ENV PYTHONUNBUFFERED=1
 
-# Expose port
-EXPOSE 8002
+# Expose ports
+# Replace 8000 and 8001 with the actual ports your applications use
+EXPOSE ${WEB_SERVER_PORT}
+EXPOSE ${SIMPLIFY_PORT}
+# Alternatively, you can list them on one line: EXPOSE 8000 8001 8002
 
 # Create volume for persistent storage
 # This ensures that the database file, models, and logs persist across container restarts
