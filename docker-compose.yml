@@ -13,6 +13,7 @@ services:
       - ./data:/app/data_host
     ports:
       - 8002:8002
+      - 8000:8000
     networks:
       - proxy
     deploy:
