@@ -454,6 +454,11 @@ class PoseHeadDetector:
         """Loads and returns a YOLO pose model."""
         logging.info(f"Loading YOLO pose model from {self.model_path}...")
         try:
+            # Check if model file exists
+            if not os.path.exists(self.model_path):
+                logging.error(f"YOLO pose model file not found: {self.model_path}")
+                return None
+
             cuda_available = torch.cuda.is_available()
             device = 'cuda' if (cuda_available and self.use_cuda) else 'cpu'
             logging.info(f"Pose model: CUDA available: {cuda_available}, Using device: {device}")
@@ -852,6 +857,11 @@ class YoloProcessor:
         """Loads and returns a YOLO model for drowsiness detection."""
         logging.info(f"Loading YOLO model from {self.model_path}...")
         try:
+            # Check if model file exists
+            if not os.path.exists(self.model_path):
+                logging.error(f"YOLO model file not found: {self.model_path}")
+                return None
+
             cuda_available = torch.cuda.is_available()
             device = 'cuda' if (cuda_available and self.use_cuda) else 'cpu'
             logging.info(f"YOLO model: CUDA available: {cuda_available}, Using device: {device}")
@@ -918,23 +928,32 @@ class YoloProcessor:
     def process_frame(self, frame):
         """Process a single frame with YOLO model and PoseHeadDetector."""
         try:
+            # Check if models are loaded
+            if self.model is None:
+                logging.error("YOLO model is None - model failed to load")
+                return None
+
+            if self.pose_detector is None:
+                logging.error("Pose detector is None")
+                return None
+
             min_size = 640 # Standard processing size
             height, width = frame.shape[:2]
             if height < min_size or width < min_size: # Upscale if too small
                 scale = max(min_size/width, min_size/height)
                 frame = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-            
+
             # Image enhancement (from both simplify.py and yolo_processor.py)
             frame = cv2.convertScaleAbs(frame, alpha=1.2, beta=10)
 
-            yolo_model_outputs = self.model(frame, verbose=False) 
+            yolo_model_outputs = self.model(frame, verbose=False)
             pose_detector_outputs = self.pose_detector.process_frame(frame)
 
             if not yolo_model_outputs: # No YOLO detections
                 # Still return pose if available, or None if pose also failed.
                 # For consistency with simplify.py, if yolo fails, frame processing failed.
-                return None 
-            
+                return None
+
             return {
                 'detection_results': yolo_model_outputs, # List of ultralytics.engine.results.Results
                 'pose_results': pose_detector_outputs  # Dict from PoseHeadDetector
@@ -1015,6 +1034,16 @@ class YoloProcessor:
             # Frame skipping logic from yolo_processor.py (targets ~10 FPS processing)
             frame_skip_interval = max(1, int(self.current_video_fps / 10))
             current_frame_index_in_video = -1
+
+            # Initialize pose_info_dict with default values in case no frames are processed successfully
+            pose_info_dict = {
+                'head_turned': False,
+                'head_down': False,
+                'head_turned_counter': 0,
+                'head_down_counter': 0,
+                'head_turned_threshold': 0,
+                'head_down_threshold': 0
+            }
 
             while True:
                 ret, frame = cap.read()
