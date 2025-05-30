@@ -84,6 +84,35 @@
     </style>
 </head>
 <body class="bg-light">
+    <!-- PIN Authentication Modal -->
+    <div class="modal fade" id="pinModal" tabindex="-1" aria-labelledby="pinModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pinModalLabel">
+                        <i class="bx bx-lock"></i> Authentication Required
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <p>Please enter the PIN to access this page.</p>
+                        <p class="text-muted small">PIN: </p>
+                    </div>
+                    <div class="mb-3">
+                        <input type="password" class="form-control text-center" id="pinInput" placeholder="Enter PIN" maxlength="8">
+                    </div>
+                    <div id="pinError" class="alert alert-danger d-none">
+                        <i class="bx bx-error-circle"></i> Invalid PIN. Please try again.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="validatePin()">
+                        <i class="bx bx-check"></i> Submit
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">Drowsiness Detection</a>
@@ -93,16 +122,13 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="/">Dashboard</a>
+                        <a class="nav-link" href="/paginated-results">Results</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/paginated-results">Paginated Results</a>
+                        <a class="nav-link" href="/paginated-queue">Queue</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/paginated-queue">Paginated Queue</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/pagination-demo">Pagination Demo</a>
+                        <a class="nav-link active" href="/pagination-demo">Demo</a>
                     </li>
                 </ul>
             </div>
@@ -375,6 +401,8 @@
                                 <p><strong>Drowsy:</strong> <span id="videoDrowsy"></span></p>
                                 <p><strong>Yawn Frames:</strong> <span id="videoYawns"></span></p>
                                 <p><strong>Eye Closed Frames:</strong> <span id="videoEyesClosed"></span></p>
+                                <p><strong>Head Turned:</strong> <span id="videoHeadTurned"></span></p>
+                                <p><strong>Head Down:</strong> <span id="videoHeadDown"></span></p>
                                 <p><strong>Normal State Frames:</strong> <span id="videoNormalState"></span></p>
                             </div>
                         </div>
@@ -394,6 +422,86 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
     <script>
+        // PIN Authentication
+        function getTodayPin() {
+            const today = new Date();
+            const day = String(today.getDate()).padStart(2, '0');
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const year = today.getFullYear();
+            return `${day}${month}${year}`;
+        }
+
+        function checkAuthSession() {
+            const authData = localStorage.getItem('drowsiness_auth');
+            if (authData) {
+                try {
+                    const parsed = JSON.parse(authData);
+                    const now = new Date().getTime();
+                    const expiryTime = new Date(parsed.expiry).getTime();
+
+                    if (now < expiryTime && parsed.pin === getTodayPin()) {
+                        return true;
+                    }
+                } catch (e) {
+                    localStorage.removeItem('drowsiness_auth');
+                }
+            }
+            return false;
+        }
+
+        function validatePin() {
+            const enteredPin = document.getElementById('pinInput').value;
+            const correctPin = getTodayPin();
+
+            if (enteredPin === correctPin) {
+                // Set expiry to 24 hours from now
+                const expiry = new Date();
+                expiry.setDate(expiry.getDate() + 1);
+
+                const authData = {
+                    pin: correctPin,
+                    expiry: expiry.toISOString()
+                };
+
+                localStorage.setItem('drowsiness_auth', JSON.stringify(authData));
+
+                // Hide modal and show content
+                const modal = bootstrap.Modal.getInstance(document.getElementById('pinModal'));
+                modal.hide();
+                document.body.style.overflow = 'auto';
+
+                // Hide error if shown
+                document.getElementById('pinError').classList.add('d-none');
+            } else {
+                // Show error
+                document.getElementById('pinError').classList.remove('d-none');
+                document.getElementById('pinInput').value = '';
+                document.getElementById('pinInput').focus();
+            }
+        }
+
+        // Check authentication on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!checkAuthSession()) {
+                // Show PIN modal
+                const pinModal = new bootstrap.Modal(document.getElementById('pinModal'));
+                pinModal.show();
+                document.body.style.overflow = 'hidden';
+
+                // Focus on PIN input when modal is shown
+                document.getElementById('pinModal').addEventListener('shown.bs.modal', function() {
+                    document.getElementById('pinInput').focus();
+                });
+
+                // Handle Enter key in PIN input
+                document.getElementById('pinInput').addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        validatePin();
+                    }
+                });
+            }
+        });
+
         // Global state
         let resultsCurrentPage = 1;
         let resultsPerPage = 10;
@@ -468,7 +576,7 @@
                         <td>${item.id || '-'}</td>
                         <td>${item.video_url ?
                             `<button type="button" class="btn btn-sm btn-primary"
-                                     onclick="openVideoModal('${item.video_url}', '${item.video_url_channel_3 || ''}', ${item.id}, '${formatDate(item.created_at)}', ${item.yawn_frames || 0}, ${item.eye_closed_frames || 0}, ${item.normal_state_frames || 0}, ${item.is_drowsy}, ${item.process_time || 0}, '${item.processing_status || ''}')">
+                                     onclick="openVideoModal('${item.video_url}', '${item.video_url_channel_3 || ''}', ${item.id}, '${formatDate(item.created_at)}', ${item.yawn_frames || 0}, ${item.eye_closed_frames || 0}, ${item.normal_state_frames || 0}, ${item.is_drowsy}, ${item.process_time || 0}, '${item.processing_status || ''}', ${item.is_head_turned}, ${item.is_head_down})">
                                 <i class="bx bx-play"></i> Play
                             </button>` :
                             '<span class="text-muted">No video</span>'
@@ -688,7 +796,7 @@
         let currentVideoChannel3Url = '';
         let currentVideoChannel = 2; // Default to channel 2
 
-        function openVideoModal(videoUrl, videoUrlChannel3, id, created, yawns, eyesClosed, normalState, isDrowsy, processTime, status) {
+        function openVideoModal(videoUrl, videoUrlChannel3, id, created, yawns, eyesClosed, normalState, isDrowsy, processTime, status, headTurned, headDown) {
             // Store both video URLs
             currentVideoChannel2Url = videoUrl || '';
             currentVideoChannel3Url = videoUrlChannel3 || '';
@@ -727,6 +835,8 @@
             document.getElementById('videoDrowsy').innerHTML = isDrowsy !== null ? `<span class="badge ${isDrowsy ? 'bg-warning' : 'bg-success'}">${isDrowsy ? 'Yes' : 'No'}</span>` : '-';
             document.getElementById('videoYawns').textContent = yawns || '0';
             document.getElementById('videoEyesClosed').textContent = eyesClosed || '0';
+            document.getElementById('videoHeadTurned').textContent = headTurned || '0';
+            document.getElementById('videoHeadDown').textContent = headDown || '0';
             document.getElementById('videoNormalState').textContent = normalState || '0';
 
             // Show modal

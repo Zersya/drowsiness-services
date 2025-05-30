@@ -70,6 +70,35 @@
     </style>
 </head>
 <body class="bg-light">
+    <!-- PIN Authentication Modal -->
+    <div class="modal fade" id="pinModal" tabindex="-1" aria-labelledby="pinModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pinModalLabel">
+                        <i class="bx bx-lock"></i> Authentication Required
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <p>Please enter the PIN to access this page.</p>
+                        <p class="text-muted small">PIN:</p>
+                    </div>
+                    <div class="mb-3">
+                        <input type="password" class="form-control text-center" id="pinInput" placeholder="Enter PIN" maxlength="8">
+                    </div>
+                    <div id="pinError" class="alert alert-danger d-none">
+                        <i class="bx bx-error-circle"></i> Invalid PIN. Please try again.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="validatePin()">
+                        <i class="bx bx-check"></i> Submit
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">Drowsiness Detection</a>
@@ -79,10 +108,10 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="/paginated-results">Paginated Results</a>
+                        <a class="nav-link" href="/paginated-results">Results</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/paginated-queue">Paginated Queue</a>
+                        <a class="nav-link active" href="/paginated-queue">Queue</a>
                     </li>
                 </ul>
             </div>
@@ -178,6 +207,86 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
     <script>
+        // PIN Authentication
+        function getTodayPin() {
+            const today = new Date();
+            const day = String(today.getDate()).padStart(2, '0');
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const year = today.getFullYear();
+            return `${day}${month}${year}`;
+        }
+
+        function checkAuthSession() {
+            const authData = localStorage.getItem('drowsiness_auth');
+            if (authData) {
+                try {
+                    const parsed = JSON.parse(authData);
+                    const now = new Date().getTime();
+                    const expiryTime = new Date(parsed.expiry).getTime();
+
+                    if (now < expiryTime && parsed.pin === getTodayPin()) {
+                        return true;
+                    }
+                } catch (e) {
+                    localStorage.removeItem('drowsiness_auth');
+                }
+            }
+            return false;
+        }
+
+        function validatePin() {
+            const enteredPin = document.getElementById('pinInput').value;
+            const correctPin = getTodayPin();
+
+            if (enteredPin === correctPin) {
+                // Set expiry to 24 hours from now
+                const expiry = new Date();
+                expiry.setDate(expiry.getDate() + 1);
+
+                const authData = {
+                    pin: correctPin,
+                    expiry: expiry.toISOString()
+                };
+
+                localStorage.setItem('drowsiness_auth', JSON.stringify(authData));
+
+                // Hide modal and show content
+                const modal = bootstrap.Modal.getInstance(document.getElementById('pinModal'));
+                modal.hide();
+                document.body.style.overflow = 'auto';
+
+                // Hide error if shown
+                document.getElementById('pinError').classList.add('d-none');
+            } else {
+                // Show error
+                document.getElementById('pinError').classList.remove('d-none');
+                document.getElementById('pinInput').value = '';
+                document.getElementById('pinInput').focus();
+            }
+        }
+
+        // Check authentication on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!checkAuthSession()) {
+                // Show PIN modal
+                const pinModal = new bootstrap.Modal(document.getElementById('pinModal'));
+                pinModal.show();
+                document.body.style.overflow = 'hidden';
+
+                // Focus on PIN input when modal is shown
+                document.getElementById('pinModal').addEventListener('shown.bs.modal', function() {
+                    document.getElementById('pinInput').focus();
+                });
+
+                // Handle Enter key in PIN input
+                document.getElementById('pinInput').addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        validatePin();
+                    }
+                });
+            }
+        });
+
         // Global pagination state
         let currentPage = 1;
         let currentPerPage = 10;
