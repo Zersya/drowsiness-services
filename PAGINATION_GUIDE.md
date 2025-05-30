@@ -101,6 +101,9 @@ GET /api/queue?page=1&per_page=10
 - Previous/Next navigation with page numbers
 - Loading states and error handling
 - Real-time pagination information display
+- **Video Modal Integration**: Click "Play Video" to watch videos directly in the browser
+- **Detection Results Display**: Shows drowsiness detection results below the video
+- **Multi-Channel Support**: Switch between Channel 2 and Channel 3 videos when available
 
 #### Paginated Queue (`/paginated-queue`)
 - Similar interface for processing queue items
@@ -162,6 +165,10 @@ const totalItems = pagination.getTotalItems();
 - **Customizable:** Easy to modify items per page
 - **Real-time Info:** Shows current page and total items
 - **Clean Styling:** Matches existing dashboard design
+- **Video Playback:** Integrated video modal for playing videos directly in the browser
+- **Detection Results:** Displays drowsiness detection metrics below the video
+- **Channel Switching:** Support for multiple video channels (Channel 2 and Channel 3)
+- **Auto-pause:** Videos automatically pause when modal is closed
 
 ## Integration Examples
 

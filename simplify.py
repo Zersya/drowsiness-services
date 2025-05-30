@@ -1463,22 +1463,22 @@ def index():
     })
 
 
-@app.route('/paginated-results')
+@app.route('/simplify-results')
 def paginated_results():
     """Serve the paginated results UI."""
-    return render_template('paginated_results.html')
+    return render_template('simplify_results.html')
 
 
-@app.route('/paginated-queue')
+@app.route('/simplify-queue')
 def paginated_queue():
     """Serve the paginated queue UI."""
-    return render_template('paginated_queue.html')
+    return render_template('simplify_queue.html')
 
 
-@app.route('/pagination-demo')
+@app.route('/simplify-demo')
 def pagination_demo():
     """Serve the pagination demo UI."""
-    return render_template('pagination_demo.html')
+    return render_template('simplify_demo.html')
 
 
 @app.route('/api/process', methods=['POST'])

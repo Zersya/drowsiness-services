@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Paginated Results - Drowsiness Detection</title>
+    <title>Paginated Queue - Drowsiness Detection</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
     <style>
@@ -79,13 +79,10 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="/">Dashboard</a>
+                        <a class="nav-link" href="/paginated-results">Paginated Results</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/paginated-results">Paginated Results</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/paginated-queue">Paginated Queue</a>
+                        <a class="nav-link active" href="/paginated-queue">Paginated Queue</a>
                     </li>
                 </ul>
             </div>
@@ -95,8 +92,8 @@
     <div class="container-fluid mt-4">
         <div class="row">
             <div class="col-12">
-                <h2><i class="bx bx-data"></i> Paginated Evidence Results</h2>
-                <p class="text-muted">Browse through evidence results with pagination controls</p>
+                <h2><i class="bx bx-list-ul"></i> Paginated Processing Queue</h2>
+                <p class="text-muted">Browse through processing queue items with pagination controls</p>
             </div>
         </div>
 
@@ -132,7 +129,7 @@
         <!-- Data Container -->
         <div class="card data-container">
             <div class="card-header bg-dark text-white">
-                <h5 class="mb-0"><i class="bx bx-table"></i> Evidence Results</h5>
+                <h5 class="mb-0"><i class="bx bx-list-ul"></i> Processing Queue</h5>
             </div>
             <div class="card-body">
                 <div class="loading-overlay d-none" id="loadingOverlay">
@@ -149,19 +146,17 @@
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table table-hover" id="resultsTable">
+                    <table class="table table-hover" id="queueTable">
                         <thead class="table-dark">
                             <tr>
                                 <th><i class="bx bx-hash"></i> ID</th>
                                 <th><i class="bx bx-video"></i> Video URL</th>
-                                <th><i class="bx bx-time"></i> Process Time</th>
-                                <th><i class="bx bx-sleepy"></i> Drowsy</th>
-                                <th><i class="bx bx-analyse"></i> Detection</th>
                                 <th><i class="bx bx-check-circle"></i> Status</th>
-                                <th><i class="bx bx-calendar"></i> Created</th>
+                                <th><i class="bx bx-calendar"></i> Created At</th>
+                                <th><i class="bx bx-cog"></i> Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="resultsTableBody">
+                        <tbody id="queueTableBody">
                             <!-- Data will be loaded here -->
                         </tbody>
                     </table>
@@ -170,7 +165,7 @@
             
             <!-- Pagination Navigation -->
             <div class="card-footer">
-                <nav aria-label="Results pagination" class="pagination-nav">
+                <nav aria-label="Queue pagination" class="pagination-nav">
                     <ul class="pagination justify-content-center mb-0" id="paginationNav">
                         <!-- Pagination buttons will be generated here -->
                     </ul>
@@ -210,7 +205,7 @@
             hideError();
             
             $.ajax({
-                url: '/api/results',
+                url: '/api/queue',
                 method: 'GET',
                 data: {
                     page: currentPage,
@@ -235,14 +230,14 @@
         }
 
         function displayData(data) {
-            const tbody = $('#resultsTableBody');
+            const tbody = $('#queueTableBody');
             tbody.empty();
             
             if (data.length === 0) {
                 tbody.append(`
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
-                            <i class="bx bx-data"></i> No data available
+                        <td colspan="5" class="text-center text-muted py-4">
+                            <i class="bx bx-data"></i> No queue items available
                         </td>
                     </tr>
                 `);
@@ -256,37 +251,30 @@
                         <td>
                             ${item.video_url ? 
                                 `<a href="${item.video_url}" target="_blank" class="text-primary">
-                                    <i class="bx bx-link-external"></i> View Video
+                                    <i class="bx bx-link-external"></i> ${truncateUrl(item.video_url)}
                                 </a>` : 
-                                '<span class="text-muted">No video</span>'
-                            }
-                        </td>
-                        <td>${item.process_time ? parseFloat(item.process_time).toFixed(2) + ' sec' : '-'}</td>
-                        <td>
-                            ${item.is_drowsy !== null ? 
-                                `<span class="badge ${item.is_drowsy ? 'bg-warning' : 'bg-success'}">
-                                    ${item.is_drowsy ? 'Yes' : 'No'}
-                                </span>` : 
-                                '-'
+                                '<span class="text-muted">No URL</span>'
                             }
                         </td>
                         <td>
-                            <small>
-                                ${item.yawn_frames ? `Yawns: ${item.yawn_frames}` : ''}
-                                ${item.eye_closed_frames ? `Eyes: ${item.eye_closed_frames}` : ''}
-                                ${item.normal_state_frames ? `Normal: ${item.normal_state_frames}` : ''}
-                            </small>
-                        </td>
-                        <td>
-                            <span class="badge ${getStatusBadgeClass(item.processing_status)}">
-                                ${item.processing_status || 'Unknown'}
+                            <span class="badge ${getStatusBadgeClass(item.status)}">
+                                ${item.status || 'Unknown'}
                             </span>
                         </td>
                         <td>${formatDate(item.created_at)}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" onclick="checkStatus(${item.id})" 
+                                    data-bs-toggle="tooltip" title="Check Status">
+                                <i class="bx bx-search"></i>
+                            </button>
+                        </td>
                     </tr>
                 `;
                 tbody.append(row);
             });
+            
+            // Initialize tooltips
+            $('[data-bs-toggle="tooltip"]').tooltip();
         }
 
         function updatePagination(pagination) {
@@ -349,6 +337,11 @@
             loadData();
         }
 
+        function checkStatus(queueId) {
+            // Open queue status in new window/tab
+            window.open(`/api/queue/${queueId}`, '_blank');
+        }
+
         function showLoading(show) {
             if (show) {
                 $('#loadingOverlay').removeClass('d-none');
@@ -368,9 +361,10 @@
 
         function getStatusBadgeClass(status) {
             switch (status) {
-                case 'processed': return 'bg-success';
+                case 'completed': return 'bg-success';
                 case 'failed': return 'bg-danger';
-                case 'pending': return 'bg-warning';
+                case 'processing': return 'bg-warning';
+                case 'pending': return 'bg-info';
                 default: return 'bg-secondary';
             }
         }
@@ -379,6 +373,12 @@
             if (!dateString) return '-';
             const date = new Date(dateString);
             return date.toLocaleString();
+        }
+
+        function truncateUrl(url, maxLength = 50) {
+            if (!url) return '';
+            if (url.length <= maxLength) return url;
+            return url.substring(0, maxLength) + '...';
         }
     </script>
 </body>

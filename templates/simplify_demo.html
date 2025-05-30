@@ -53,6 +53,34 @@
         .tab-pane {
             padding: 20px;
         }
+        .video-modal .modal-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 15px;
+        }
+        .video-modal .modal-header {
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        .video-modal .modal-footer {
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        .video-container {
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .video-info {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            color: white;
+        }
+        .video-info p {
+            margin-bottom: 8px;
+        }
+        .video-info strong {
+            color: #fff;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -309,6 +337,59 @@
         </div>
     </div>
 
+    <!-- Video Modal -->
+    <div class="modal fade video-modal" id="videoModal" tabindex="-1" aria-labelledby="videoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="videoModalLabel">Video Playback</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Video Channel Selector -->
+                    <div class="mb-3 text-center" id="channelSelector" style="display: none;">
+                        <div class="btn-group" role="group" aria-label="Video Channel Selector">
+                            <button type="button" class="btn btn-primary active" id="channel2Button" onclick="switchVideoChannel(2)">
+                                <i class="bx bx-video"></i> Channel 2 Video
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" id="channel3Button" onclick="switchVideoChannel(3)">
+                                <i class="bx bx-video"></i> Channel 3 Video
+                            </button>
+                        </div>
+                    </div>
+                    <div class="video-container">
+                        <video id="videoPlayer" controls style="width: 100%; height: auto;">
+                            <source src="" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+                    <div class="video-info mt-3">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>ID:</strong> <span id="videoId"></span></p>
+                                <p><strong>Created:</strong> <span id="videoCreated"></span></p>
+                                <p><strong>Process Time:</strong> <span id="videoProcessTime"></span></p>
+                                <p><strong>Status:</strong> <span id="videoStatus"></span></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Drowsy:</strong> <span id="videoDrowsy"></span></p>
+                                <p><strong>Yawn Frames:</strong> <span id="videoYawns"></span></p>
+                                <p><strong>Eye Closed Frames:</strong> <span id="videoEyesClosed"></span></p>
+                                <p><strong>Normal State Frames:</strong> <span id="videoNormalState"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a id="downloadButton" href="" download class="btn btn-outline-primary">
+                        <i class="bx bx-download"></i> Download Video
+                    </a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
@@ -385,7 +466,13 @@
                 const row = `
                     <tr>
                         <td>${item.id || '-'}</td>
-                        <td>${item.video_url ? '<i class="bx bx-video text-primary"></i> Available' : '<span class="text-muted">No video</span>'}</td>
+                        <td>${item.video_url ?
+                            `<button type="button" class="btn btn-sm btn-primary"
+                                     onclick="openVideoModal('${item.video_url}', '${item.video_url_channel_3 || ''}', ${item.id}, '${formatDate(item.created_at)}', ${item.yawn_frames || 0}, ${item.eye_closed_frames || 0}, ${item.normal_state_frames || 0}, ${item.is_drowsy}, ${item.process_time || 0}, '${item.processing_status || ''}')">
+                                <i class="bx bx-play"></i> Play
+                            </button>` :
+                            '<span class="text-muted">No video</span>'
+                        }</td>
                         <td>${item.process_time ? parseFloat(item.process_time).toFixed(2) + ' sec' : '-'}</td>
                         <td>${item.is_drowsy !== null ? `<span class="badge ${item.is_drowsy ? 'bg-warning' : 'bg-success'}">${item.is_drowsy ? 'Yes' : 'No'}</span>` : '-'}</td>
                         <td><span class="badge ${getStatusBadgeClass(item.processing_status)}">${item.processing_status || 'Unknown'}</span></td>
@@ -595,6 +682,97 @@
             const date = new Date(dateString);
             return date.toLocaleString();
         }
+
+        // Video modal functions
+        let currentVideoChannel2Url = '';
+        let currentVideoChannel3Url = '';
+        let currentVideoChannel = 2; // Default to channel 2
+
+        function openVideoModal(videoUrl, videoUrlChannel3, id, created, yawns, eyesClosed, normalState, isDrowsy, processTime, status) {
+            // Store both video URLs
+            currentVideoChannel2Url = videoUrl || '';
+            currentVideoChannel3Url = videoUrlChannel3 || '';
+
+            // Reset to channel 2 by default
+            currentVideoChannel = 2;
+
+            // Show/hide channel selector based on availability
+            const channelSelector = document.getElementById('channelSelector');
+            if (currentVideoChannel2Url && currentVideoChannel3Url) {
+                channelSelector.style.display = 'block';
+                updateChannelButtonsUI();
+            } else {
+                channelSelector.style.display = 'none';
+            }
+
+            // Set video source based on availability
+            const videoPlayer = document.getElementById('videoPlayer');
+            if (currentVideoChannel2Url) {
+                videoPlayer.src = currentVideoChannel2Url;
+                document.getElementById('downloadButton').href = currentVideoChannel2Url;
+            } else if (currentVideoChannel3Url) {
+                videoPlayer.src = currentVideoChannel3Url;
+                document.getElementById('downloadButton').href = currentVideoChannel3Url;
+                currentVideoChannel = 3;
+                if (channelSelector.style.display !== 'none') {
+                    updateChannelButtonsUI();
+                }
+            }
+
+            // Set video info
+            document.getElementById('videoId').textContent = id || '-';
+            document.getElementById('videoCreated').textContent = created || '-';
+            document.getElementById('videoProcessTime').textContent = processTime ? parseFloat(processTime).toFixed(2) + ' sec' : '-';
+            document.getElementById('videoStatus').innerHTML = status ? `<span class="badge ${getStatusBadgeClass(status)}">${status}</span>` : '-';
+            document.getElementById('videoDrowsy').innerHTML = isDrowsy !== null ? `<span class="badge ${isDrowsy ? 'bg-warning' : 'bg-success'}">${isDrowsy ? 'Yes' : 'No'}</span>` : '-';
+            document.getElementById('videoYawns').textContent = yawns || '0';
+            document.getElementById('videoEyesClosed').textContent = eyesClosed || '0';
+            document.getElementById('videoNormalState').textContent = normalState || '0';
+
+            // Show modal
+            const videoModal = new bootstrap.Modal(document.getElementById('videoModal'));
+            videoModal.show();
+        }
+
+        function switchVideoChannel(channel) {
+            const videoPlayer = document.getElementById('videoPlayer');
+
+            if (channel === 2 && currentVideoChannel2Url) {
+                videoPlayer.src = currentVideoChannel2Url;
+                document.getElementById('downloadButton').href = currentVideoChannel2Url;
+                currentVideoChannel = 2;
+            } else if (channel === 3 && currentVideoChannel3Url) {
+                videoPlayer.src = currentVideoChannel3Url;
+                document.getElementById('downloadButton').href = currentVideoChannel3Url;
+                currentVideoChannel = 3;
+            }
+
+            updateChannelButtonsUI();
+        }
+
+        function updateChannelButtonsUI() {
+            const channel2Button = document.getElementById('channel2Button');
+            const channel3Button = document.getElementById('channel3Button');
+
+            if (currentVideoChannel === 2) {
+                channel2Button.className = 'btn btn-primary active';
+                channel3Button.className = 'btn btn-outline-primary';
+            } else {
+                channel2Button.className = 'btn btn-outline-primary';
+                channel3Button.className = 'btn btn-primary active';
+            }
+
+            // Disable buttons if URLs are not available
+            channel2Button.disabled = !currentVideoChannel2Url;
+            channel3Button.disabled = !currentVideoChannel3Url;
+        }
+
+        // Close video when modal is hidden
+        document.getElementById('videoModal').addEventListener('hidden.bs.modal', function () {
+            const videoPlayer = document.getElementById('videoPlayer');
+            videoPlayer.pause();
+            videoPlayer.currentTime = 0;
+        });
     </script>
 </body>
 </html>
