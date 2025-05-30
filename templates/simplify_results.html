@@ -136,6 +136,7 @@
                             <option value="25">25</option>
                             <option value="50">50</option>
                             <option value="100">100</option>
+                            <option value="1000">1000</option>
                         </select>
                     </div>
                     <div class="col-md-4">
@@ -242,6 +243,8 @@
                                 <p><strong>Drowsy:</strong> <span id="videoDrowsy"></span></p>
                                 <p><strong>Yawn Frames:</strong> <span id="videoYawns"></span></p>
                                 <p><strong>Eye Closed Frames:</strong> <span id="videoEyesClosed"></span></p>
+                                <p><strong>Head Turned:</strong> <span id="videoHeadTurned"></span></p>
+                                <p><strong>Head Down:</strong> <span id="videoHeadDown"></span></p>
                                 <p><strong>Normal State Frames:</strong> <span id="videoNormalState"></span></p>
                             </div>
                         </div>
@@ -334,7 +337,7 @@
                         <td>
                             ${item.video_url ?
                                 `<button type="button" class="btn btn-sm btn-primary"
-                                         onclick="openVideoModal('${item.video_url}', '${item.video_url_channel_3 || ''}', ${item.id}, '${formatDate(item.created_at)}', ${item.yawn_frames || 0}, ${item.eye_closed_frames || 0}, ${item.normal_state_frames || 0}, ${item.is_drowsy}, ${item.process_time || 0}, '${item.processing_status || ''}')">
+                                         onclick="openVideoModal('${item.video_url}', '${item.video_url_channel_3 || ''}', ${item.id}, '${formatDate(item.created_at)}', ${item.yawn_frames || 0}, ${item.eye_closed_frames || 0}, ${item.normal_state_frames || 0}, ${item.is_drowsy}, ${item.process_time || 0}, '${item.processing_status || ''}', ${item.is_head_turned}, ${item.is_head_down})">
                                     <i class="bx bx-play"></i> Play Video
                                 </button>` :
                                 '<span class="text-muted">No video</span>'
@@ -354,6 +357,8 @@
                                 ${item.yawn_frames ? `Yawns: ${item.yawn_frames}` : ''}
                                 ${item.eye_closed_frames ? `Eyes: ${item.eye_closed_frames}` : ''}
                                 ${item.normal_state_frames ? `Normal: ${item.normal_state_frames}` : ''}
+                                ${item.is_head_turned ? `Head Turned: ${item.head_turned_frames}` : ''}
+                                ${item.is_head_down ? `Head Down: ${item.head_down_frames}` : ''}
                             </small>
                         </td>
                         <td>
@@ -465,7 +470,7 @@
         let currentVideoChannel3Url = '';
         let currentVideoChannel = 2; // Default to channel 2
 
-        function openVideoModal(videoUrl, videoUrlChannel3, id, created, yawns, eyesClosed, normalState, isDrowsy, processTime, status) {
+        function openVideoModal(videoUrl, videoUrlChannel3, id, created, yawns, eyesClosed, normalState, isDrowsy, processTime, status, headTurned, headDown) {
             // Store both video URLs
             currentVideoChannel2Url = videoUrl || '';
             currentVideoChannel3Url = videoUrlChannel3 || '';
@@ -504,6 +509,8 @@
             document.getElementById('videoDrowsy').innerHTML = isDrowsy !== null ? `<span class="badge ${isDrowsy ? 'bg-warning' : 'bg-success'}">${isDrowsy ? 'Yes' : 'No'}</span>` : '-';
             document.getElementById('videoYawns').textContent = yawns || '0';
             document.getElementById('videoEyesClosed').textContent = eyesClosed || '0';
+            document.getElementById('videoHeadTurned').textContent = headTurned || '0';
+            document.getElementById('videoHeadDown').textContent = headDown || '0';
             document.getElementById('videoNormalState').textContent = normalState || '0';
 
             // Show modal
