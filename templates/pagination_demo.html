@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagination Demo - Drowsiness Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
+    <style>
+        .stats-card {
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+        .table-responsive {
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .data-container {
+            position: relative;
+            min-height: 400px;
+        }
+        .section-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .api-demo-card {
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        .tab-content {
+            padding: 0;
+        }
+        .nav-tabs .nav-link {
+            border: none;
+            border-radius: 0;
+            color: #6c757d;
+            font-weight: 500;
+        }
+        .nav-tabs .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+        .tab-pane {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Drowsiness Detection</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/paginated-results">Paginated Results</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/paginated-queue">Paginated Queue</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/pagination-demo">Pagination Demo</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- Header Section -->
+        <div class="section-header">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1><i class="bx bx-data"></i> Pagination API Demo</h1>
+                    <p class="mb-0">Comprehensive demonstration of paginated APIs for Evidence Results and Processing Queue</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="d-flex justify-content-end gap-2">
+                        <button class="btn btn-light btn-sm" onclick="refreshAllData()">
+                            <i class="bx bx-refresh"></i> Refresh All
+                        </button>
+                        <button class="btn btn-outline-light btn-sm" onclick="showApiInfo()">
+                            <i class="bx bx-info-circle"></i> API Info
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Demo Tabs -->
+        <div class="card api-demo-card">
+            <ul class="nav nav-tabs" id="apiTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="results-tab" data-bs-toggle="tab" data-bs-target="#results-pane" type="button" role="tab">
+                        <i class="bx bx-table"></i> Evidence Results API
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="queue-tab" data-bs-toggle="tab" data-bs-target="#queue-pane" type="button" role="tab">
+                        <i class="bx bx-list-ul"></i> Processing Queue API
+                    </button>
+                </li>
+            </ul>
+            
+            <div class="tab-content" id="apiTabContent">
+                <!-- Evidence Results Tab -->
+                <div class="tab-pane fade show active" id="results-pane" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5><i class="bx bx-table"></i> Evidence Results</h5>
+                        <span class="badge bg-primary">API: /api/results</span>
+                    </div>
+                    
+                    <!-- Results Pagination Controls -->
+                    <div class="card mb-3" style="background: #f8f9fa;">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <label for="resultsPerPage" class="form-label">Items per page:</label>
+                                    <select class="form-select" id="resultsPerPage" style="max-width: 120px;">
+                                        <option value="10">10</option>
+                                        <option value="25">25</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="text-center p-2" style="background: #e9ecef; border-radius: 8px;">
+                                        <span id="resultsInfo">Loading...</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="d-flex justify-content-end">
+                                        <button class="btn btn-primary" onclick="refreshResults()">
+                                            <i class="bx bx-refresh"></i> Refresh
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results Data Container -->
+                    <div class="data-container">
+                        <div class="loading-overlay d-none" id="resultsLoading">
+                            <div class="text-center">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <div class="mt-2">Loading results...</div>
+                            </div>
+                        </div>
+                        
+                        <div id="resultsError" class="alert alert-danger d-none">
+                            <i class="bx bx-error-circle"></i> <span id="resultsErrorText"></span>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th><i class="bx bx-hash"></i> ID</th>
+                                        <th><i class="bx bx-video"></i> Video</th>
+                                        <th><i class="bx bx-time"></i> Process Time</th>
+                                        <th><i class="bx bx-sleepy"></i> Drowsy</th>
+                                        <th><i class="bx bx-check-circle"></i> Status</th>
+                                        <th><i class="bx bx-calendar"></i> Created</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="resultsTableBody">
+                                    <!-- Data will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Results Pagination -->
+                    <nav aria-label="Results pagination" class="mt-3">
+                        <ul class="pagination justify-content-center" id="resultsPagination">
+                            <!-- Pagination will be generated here -->
+                        </ul>
+                    </nav>
+                </div>
+
+                <!-- Processing Queue Tab -->
+                <div class="tab-pane fade" id="queue-pane" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5><i class="bx bx-list-ul"></i> Processing Queue</h5>
+                        <span class="badge bg-success">API: /api/queue?page=1</span>
+                    </div>
+                    
+                    <!-- Queue Pagination Controls -->
+                    <div class="card mb-3" style="background: #f8f9fa;">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <label for="queuePerPage" class="form-label">Items per page:</label>
+                                    <select class="form-select" id="queuePerPage" style="max-width: 120px;">
+                                        <option value="10">10</option>
+                                        <option value="25">25</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="text-center p-2" style="background: #e9ecef; border-radius: 8px;">
+                                        <span id="queueInfo">Loading...</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="d-flex justify-content-end">
+                                        <button class="btn btn-primary" onclick="refreshQueue()">
+                                            <i class="bx bx-refresh"></i> Refresh
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Queue Data Container -->
+                    <div class="data-container">
+                        <div class="loading-overlay d-none" id="queueLoading">
+                            <div class="text-center">
+                                <div class="spinner-border text-success" role="status"></div>
+                                <div class="mt-2">Loading queue...</div>
+                            </div>
+                        </div>
+                        
+                        <div id="queueError" class="alert alert-danger d-none">
+                            <i class="bx bx-error-circle"></i> <span id="queueErrorText"></span>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th><i class="bx bx-hash"></i> ID</th>
+                                        <th><i class="bx bx-video"></i> Video URL</th>
+                                        <th><i class="bx bx-check-circle"></i> Status</th>
+                                        <th><i class="bx bx-calendar"></i> Created At</th>
+                                        <th><i class="bx bx-cog"></i> Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="queueTableBody">
+                                    <!-- Data will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Queue Pagination -->
+                    <nav aria-label="Queue pagination" class="mt-3">
+                        <ul class="pagination justify-content-center" id="queuePagination">
+                            <!-- Pagination will be generated here -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Info Modal -->
+    <div class="modal fade" id="apiInfoModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bx bx-code-alt"></i> API Information</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>Evidence Results API</h6>
+                    <pre><code>GET /api/results?page=1&per_page=10</code></pre>
+                    <p>Returns paginated evidence results with metadata including total count, current page, and navigation info.</p>
+                    
+                    <h6>Processing Queue API</h6>
+                    <pre><code>GET /api/queue?page=1&per_page=10</code></pre>
+                    <p>Returns paginated queue items when page parameter is provided, otherwise returns queue statistics.</p>
+                    
+                    <h6>Response Format</h6>
+                    <pre><code>{
+  "success": true,
+  "data": [...],
+  "pagination": {
+    "current_page": 1,
+    "per_page": 10,
+    "total_pages": 5,
+    "total_items": 50,
+    "has_next": true,
+    "has_previous": false,
+    "next_page": 2,
+    "previous_page": null
+  }
+}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <script>
+        // Global state
+        let resultsCurrentPage = 1;
+        let resultsPerPage = 10;
+        let queueCurrentPage = 1;
+        let queuePerPage = 10;
+
+        // Initialize page
+        $(document).ready(function() {
+            $('#resultsPerPage').val(resultsPerPage);
+            $('#queuePerPage').val(queuePerPage);
+            
+            // Load initial data
+            loadResults();
+            loadQueue();
+            
+            // Event handlers
+            $('#resultsPerPage').change(function() {
+                resultsPerPage = parseInt($(this).val());
+                resultsCurrentPage = 1;
+                loadResults();
+            });
+            
+            $('#queuePerPage').change(function() {
+                queuePerPage = parseInt($(this).val());
+                queueCurrentPage = 1;
+                loadQueue();
+            });
+        });
+
+        // Results functions
+        function loadResults() {
+            showResultsLoading(true);
+            hideResultsError();
+            
+            $.ajax({
+                url: '/api/results',
+                method: 'GET',
+                data: {
+                    page: resultsCurrentPage,
+                    per_page: resultsPerPage
+                },
+                success: function(response) {
+                    if (response.success) {
+                        displayResults(response.data);
+                        updateResultsPagination(response.pagination);
+                        updateResultsInfo(response.pagination);
+                    } else {
+                        showResultsError('Failed to load results: ' + (response.error || 'Unknown error'));
+                    }
+                },
+                error: function(xhr, status, error) {
+                    showResultsError('Network error: ' + error);
+                },
+                complete: function() {
+                    showResultsLoading(false);
+                }
+            });
+        }
+
+        function displayResults(data) {
+            const tbody = $('#resultsTableBody');
+            tbody.empty();
+            
+            if (data.length === 0) {
+                tbody.append('<tr><td colspan="6" class="text-center text-muted py-4"><i class="bx bx-data"></i> No results available</td></tr>');
+                return;
+            }
+            
+            data.forEach(function(item) {
+                const row = `
+                    <tr>
+                        <td>${item.id || '-'}</td>
+                        <td>${item.video_url ? '<i class="bx bx-video text-primary"></i> Available' : '<span class="text-muted">No video</span>'}</td>
+                        <td>${item.process_time ? parseFloat(item.process_time).toFixed(2) + ' sec' : '-'}</td>
+                        <td>${item.is_drowsy !== null ? `<span class="badge ${item.is_drowsy ? 'bg-warning' : 'bg-success'}">${item.is_drowsy ? 'Yes' : 'No'}</span>` : '-'}</td>
+                        <td><span class="badge ${getStatusBadgeClass(item.processing_status)}">${item.processing_status || 'Unknown'}</span></td>
+                        <td>${formatDate(item.created_at)}</td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        }
+
+        function updateResultsPagination(pagination) {
+            resultsCurrentPage = pagination.current_page;
+            const nav = $('#resultsPagination');
+            nav.empty();
+            
+            // Previous button
+            nav.append(`<li class="page-item ${!pagination.has_previous ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="goToResultsPage(${pagination.previous_page || 1}); return false;">Previous</a>
+            </li>`);
+            
+            // Page numbers
+            const startPage = Math.max(1, resultsCurrentPage - 2);
+            const endPage = Math.min(pagination.total_pages, resultsCurrentPage + 2);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                nav.append(`<li class="page-item ${i === resultsCurrentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="goToResultsPage(${i}); return false;">${i}</a>
+                </li>`);
+            }
+            
+            // Next button
+            nav.append(`<li class="page-item ${!pagination.has_next ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="goToResultsPage(${pagination.next_page || pagination.total_pages}); return false;">Next</a>
+            </li>`);
+        }
+
+        function updateResultsInfo(pagination) {
+            const start = (pagination.current_page - 1) * pagination.per_page + 1;
+            const end = Math.min(pagination.current_page * pagination.per_page, pagination.total_items);
+            $('#resultsInfo').html(`<i class="bx bx-info-circle"></i> Showing ${start} to ${end} of ${pagination.total_items} entries`);
+        }
+
+        function goToResultsPage(page) {
+            resultsCurrentPage = page;
+            loadResults();
+        }
+
+        function refreshResults() {
+            loadResults();
+        }
+
+        function showResultsLoading(show) {
+            $('#resultsLoading').toggleClass('d-none', !show);
+        }
+
+        function showResultsError(message) {
+            $('#resultsErrorText').text(message);
+            $('#resultsError').removeClass('d-none');
+        }
+
+        function hideResultsError() {
+            $('#resultsError').addClass('d-none');
+        }
+
+        // Queue functions
+        function loadQueue() {
+            showQueueLoading(true);
+            hideQueueError();
+            
+            $.ajax({
+                url: '/api/queue',
+                method: 'GET',
+                data: {
+                    page: queueCurrentPage,
+                    per_page: queuePerPage
+                },
+                success: function(response) {
+                    if (response.success) {
+                        displayQueue(response.data);
+                        updateQueuePagination(response.pagination);
+                        updateQueueInfo(response.pagination);
+                    } else {
+                        showQueueError('Failed to load queue: ' + (response.error || 'Unknown error'));
+                    }
+                },
+                error: function(xhr, status, error) {
+                    showQueueError('Network error: ' + error);
+                },
+                complete: function() {
+                    showQueueLoading(false);
+                }
+            });
+        }
+
+        function displayQueue(data) {
+            const tbody = $('#queueTableBody');
+            tbody.empty();
+            
+            if (data.length === 0) {
+                tbody.append('<tr><td colspan="5" class="text-center text-muted py-4"><i class="bx bx-data"></i> No queue items available</td></tr>');
+                return;
+            }
+            
+            data.forEach(function(item) {
+                const row = `
+                    <tr>
+                        <td>${item.id || '-'}</td>
+                        <td>${item.video_url ? `<span class="text-truncate" style="max-width: 200px; display: inline-block;" title="${item.video_url}">${item.video_url}</span>` : '<span class="text-muted">No URL</span>'}</td>
+                        <td><span class="badge ${getQueueStatusBadgeClass(item.status)}">${item.status || 'Unknown'}</span></td>
+                        <td>${formatDate(item.created_at)}</td>
+                        <td><button class="btn btn-sm btn-outline-info" onclick="checkQueueStatus(${item.id})"><i class="bx bx-search"></i></button></td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        }
+
+        function updateQueuePagination(pagination) {
+            queueCurrentPage = pagination.current_page;
+            const nav = $('#queuePagination');
+            nav.empty();
+            
+            // Previous button
+            nav.append(`<li class="page-item ${!pagination.has_previous ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="goToQueuePage(${pagination.previous_page || 1}); return false;">Previous</a>
+            </li>`);
+            
+            // Page numbers
+            const startPage = Math.max(1, queueCurrentPage - 2);
+            const endPage = Math.min(pagination.total_pages, queueCurrentPage + 2);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                nav.append(`<li class="page-item ${i === queueCurrentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="goToQueuePage(${i}); return false;">${i}</a>
+                </li>`);
+            }
+            
+            // Next button
+            nav.append(`<li class="page-item ${!pagination.has_next ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="goToQueuePage(${pagination.next_page || pagination.total_pages}); return false;">Next</a>
+            </li>`);
+        }
+
+        function updateQueueInfo(pagination) {
+            const start = (pagination.current_page - 1) * pagination.per_page + 1;
+            const end = Math.min(pagination.current_page * pagination.per_page, pagination.total_items);
+            $('#queueInfo').html(`<i class="bx bx-info-circle"></i> Showing ${start} to ${end} of ${pagination.total_items} entries`);
+        }
+
+        function goToQueuePage(page) {
+            queueCurrentPage = page;
+            loadQueue();
+        }
+
+        function refreshQueue() {
+            loadQueue();
+        }
+
+        function showQueueLoading(show) {
+            $('#queueLoading').toggleClass('d-none', !show);
+        }
+
+        function showQueueError(message) {
+            $('#queueErrorText').text(message);
+            $('#queueError').removeClass('d-none');
+        }
+
+        function hideQueueError() {
+            $('#queueError').addClass('d-none');
+        }
+
+        function checkQueueStatus(queueId) {
+            window.open(`/api/queue/${queueId}`, '_blank');
+        }
+
+        // Utility functions
+        function refreshAllData() {
+            loadResults();
+            loadQueue();
+        }
+
+        function showApiInfo() {
+            new bootstrap.Modal(document.getElementById('apiInfoModal')).show();
+        }
+
+        function getStatusBadgeClass(status) {
+            switch (status) {
+                case 'processed': return 'bg-success';
+                case 'failed': return 'bg-danger';
+                case 'pending': return 'bg-warning';
+                default: return 'bg-secondary';
+            }
+        }
+
+        function getQueueStatusBadgeClass(status) {
+            switch (status) {
+                case 'completed': return 'bg-success';
+                case 'failed': return 'bg-danger';
+                case 'processing': return 'bg-warning';
+                case 'pending': return 'bg-info';
+                default: return 'bg-secondary';
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+    </script>
+</body>
+</html>

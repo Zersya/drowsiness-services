@@ -1,0 +1,282 @@
+<!-- Reusable Pagination Component -->
+<!-- Usage: Include this template and call initializePagination() with appropriate parameters -->
+
+<style>
+    .pagination-controls-component {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .pagination-info-component {
+        background: #e9ecef;
+        border-radius: 8px;
+        padding: 10px 15px;
+        margin: 10px 0;
+        font-size: 0.9rem;
+    }
+    .per-page-selector-component {
+        max-width: 120px;
+    }
+    .pagination-nav-component {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .loading-overlay-component {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        border-radius: 10px;
+    }
+    .error-message-component {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 20px 0;
+    }
+</style>
+
+<!-- Pagination Controls -->
+<div class="card pagination-controls-component" id="paginationControls">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                <label for="perPageSelectComponent" class="form-label">Items per page:</label>
+                <select class="form-select per-page-selector-component" id="perPageSelectComponent">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <div class="pagination-info-component text-center">
+                    <span id="paginationInfoComponent">Loading...</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="d-flex justify-content-end">
+                    <button class="btn btn-primary" id="refreshButtonComponent">
+                        <i class="bx bx-refresh"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay (to be placed inside data container) -->
+<div class="loading-overlay-component d-none" id="loadingOverlayComponent">
+    <div class="text-center">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="mt-2">Loading data...</div>
+    </div>
+</div>
+
+<!-- Error Message (to be placed inside data container) -->
+<div id="errorMessageComponent" class="error-message-component d-none">
+    <i class="bx bx-error-circle"></i> <span id="errorTextComponent"></span>
+</div>
+
+<!-- Pagination Navigation (to be placed in card footer) -->
+<nav aria-label="Pagination navigation" class="pagination-nav-component">
+    <ul class="pagination justify-content-center mb-0" id="paginationNavComponent">
+        <!-- Pagination buttons will be generated here -->
+    </ul>
+</nav>
+
+<script>
+    // Pagination Component JavaScript
+    class PaginationComponent {
+        constructor(config) {
+            this.apiUrl = config.apiUrl;
+            this.onDataReceived = config.onDataReceived || function() {};
+            this.onError = config.onError || function() {};
+            this.currentPage = 1;
+            this.currentPerPage = 10;
+            this.totalPages = 1;
+            this.totalItems = 0;
+            this.additionalParams = config.additionalParams || {};
+            
+            this.init();
+        }
+        
+        init() {
+            // Set default per page value
+            $('#perPageSelectComponent').val(this.currentPerPage);
+            
+            // Bind events
+            $('#perPageSelectComponent').change(() => {
+                this.currentPerPage = parseInt($('#perPageSelectComponent').val());
+                this.currentPage = 1; // Reset to first page
+                this.loadData();
+            });
+            
+            $('#refreshButtonComponent').click(() => {
+                this.refreshData();
+            });
+            
+            // Load initial data
+            this.loadData();
+        }
+        
+        loadData() {
+            this.showLoading(true);
+            this.hideError();
+            
+            const params = {
+                page: this.currentPage,
+                per_page: this.currentPerPage,
+                ...this.additionalParams
+            };
+            
+            $.ajax({
+                url: this.apiUrl,
+                method: 'GET',
+                data: params,
+                success: (response) => {
+                    if (response.success) {
+                        this.onDataReceived(response.data);
+                        this.updatePagination(response.pagination);
+                        this.updatePaginationInfo(response.pagination);
+                    } else {
+                        this.showError('Failed to load data: ' + (response.error || 'Unknown error'));
+                        this.onError(response.error || 'Unknown error');
+                    }
+                },
+                error: (xhr, status, error) => {
+                    this.showError('Network error: ' + error);
+                    this.onError('Network error: ' + error);
+                },
+                complete: () => {
+                    this.showLoading(false);
+                }
+            });
+        }
+        
+        updatePagination(pagination) {
+            this.currentPage = pagination.current_page;
+            this.totalPages = pagination.total_pages;
+            this.totalItems = pagination.total_items;
+            
+            const nav = $('#paginationNavComponent');
+            nav.empty();
+            
+            // Previous button
+            nav.append(`
+                <li class="page-item ${!pagination.has_previous ? 'disabled' : ''}">
+                    <a class="page-link" href="#" data-page="${pagination.previous_page || 1}">
+                        <i class="bx bx-chevron-left"></i> Previous
+                    </a>
+                </li>
+            `);
+            
+            // Page numbers
+            const startPage = Math.max(1, this.currentPage - 2);
+            const endPage = Math.min(this.totalPages, this.currentPage + 2);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                nav.append(`
+                    <li class="page-item ${i === this.currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" data-page="${i}">${i}</a>
+                    </li>
+                `);
+            }
+            
+            // Next button
+            nav.append(`
+                <li class="page-item ${!pagination.has_next ? 'disabled' : ''}">
+                    <a class="page-link" href="#" data-page="${pagination.next_page || this.totalPages}">
+                        Next <i class="bx bx-chevron-right"></i>
+                    </a>
+                </li>
+            `);
+            
+            // Bind click events
+            nav.find('a.page-link').click((e) => {
+                e.preventDefault();
+                const page = parseInt($(e.currentTarget).data('page'));
+                this.goToPage(page);
+            });
+        }
+        
+        updatePaginationInfo(pagination) {
+            const start = (pagination.current_page - 1) * pagination.per_page + 1;
+            const end = Math.min(pagination.current_page * pagination.per_page, pagination.total_items);
+            
+            $('#paginationInfoComponent').html(`
+                <i class="bx bx-info-circle"></i> 
+                Showing ${start} to ${end} of ${pagination.total_items} entries
+            `);
+        }
+        
+        goToPage(page) {
+            if (page >= 1 && page <= this.totalPages && page !== this.currentPage) {
+                this.currentPage = page;
+                this.loadData();
+            }
+        }
+        
+        refreshData() {
+            this.loadData();
+        }
+        
+        showLoading(show) {
+            if (show) {
+                $('#loadingOverlayComponent').removeClass('d-none');
+            } else {
+                $('#loadingOverlayComponent').addClass('d-none');
+            }
+        }
+        
+        showError(message) {
+            $('#errorTextComponent').text(message);
+            $('#errorMessageComponent').removeClass('d-none');
+        }
+        
+        hideError() {
+            $('#errorMessageComponent').addClass('d-none');
+        }
+        
+        setAdditionalParams(params) {
+            this.additionalParams = params;
+            this.currentPage = 1; // Reset to first page when params change
+            this.loadData();
+        }
+        
+        getCurrentPage() {
+            return this.currentPage;
+        }
+        
+        getCurrentPerPage() {
+            return this.currentPerPage;
+        }
+        
+        getTotalItems() {
+            return this.totalItems;
+        }
+        
+        getTotalPages() {
+            return this.totalPages;
+        }
+    }
+    
+    // Global function to initialize pagination
+    function initializePaginationComponent(config) {
+        return new PaginationComponent(config);
+    }
+</script>

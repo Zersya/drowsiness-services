@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 from abc import ABC, abstractmethod
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 import requests
 from dotenv import load_dotenv
@@ -325,6 +325,43 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logging.error(f"Error getting all evidence results: {e}")
             return []
+
+    def get_evidence_results_count(self):
+        """Get total count of evidence results."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute('SELECT COUNT(*) as count FROM evidence_results')
+                result = cursor.fetchone()
+                return result[0] if result else 0
+        except sqlite3.Error as e:
+            logging.error(f"Error getting evidence results count: {e}")
+            return 0
+
+    def get_all_queue_items(self, limit=100, offset=0):
+        """Get all queue items with pagination."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    'SELECT * FROM processing_queue ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                    (limit, offset)
+                )
+                results = cursor.fetchall()
+                return [dict(row) for row in results]
+        except sqlite3.Error as e:
+            logging.error(f"Error getting all queue items: {e}")
+            return []
+
+    def get_queue_items_count(self):
+        """Get total count of queue items."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute('SELECT COUNT(*) as count FROM processing_queue')
+                result = cursor.fetchone()
+                return result[0] if result else 0
+        except sqlite3.Error as e:
+            logging.error(f"Error getting queue items count: {e}")
+            return 0
 
     def add_webhook(self, url):
         """Add a new webhook URL."""
@@ -1419,8 +1456,29 @@ def index():
             '/api/result/<id>',      # Get details for a specific processed video
             '/api/webhook',          # Manage webhooks (GET, POST, DELETE)
             '/api/download/db',      # Download the SQLite database file
+            '/paginated-results',    # Paginated results UI
+            '/paginated-queue',      # Paginated queue UI
+            '/pagination-demo',      # Comprehensive pagination demo
         ]
     })
+
+
+@app.route('/paginated-results')
+def paginated_results():
+    """Serve the paginated results UI."""
+    return render_template('paginated_results.html')
+
+
+@app.route('/paginated-queue')
+def paginated_queue():
+    """Serve the paginated queue UI."""
+    return render_template('paginated_queue.html')
+
+
+@app.route('/pagination-demo')
+def pagination_demo():
+    """Serve the pagination demo UI."""
+    return render_template('pagination_demo.html')
 
 
 @app.route('/api/process', methods=['POST'])
@@ -1533,7 +1591,14 @@ def get_queue_status(queue_id):
 def get_queue_stats():
     """Get statistics about the processing queue."""
     try:
-        # Get queue stats
+        # Check if this is a request for paginated queue items
+        page = request.args.get('page', type=int)
+
+        if page is not None:
+            # Return paginated queue items
+            return get_queue_items_paginated()
+
+        # Get queue stats (original functionality)
         stats = db_manager.get_queue_stats()
 
         # Get thread pool information
@@ -1580,6 +1645,52 @@ def get_queue_stats():
         }), 500
 
 
+def get_queue_items_paginated():
+    """Get paginated queue items."""
+    try:
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+
+        # Validate pagination parameters
+        page = max(1, page)
+        per_page = max(1, min(100, per_page))  # Limit per_page to 100
+
+        # Calculate offset
+        offset = (page - 1) * per_page
+
+        # Get total count and results from database
+        total_count = db_manager.get_queue_items_count()
+        results = db_manager.get_all_queue_items(per_page, offset)
+
+        # Calculate pagination metadata
+        total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+        has_next = page < total_pages
+        has_previous = page > 1
+
+        return jsonify({
+            'success': True,
+            'data': results,
+            'pagination': {
+                'current_page': page,
+                'per_page': per_page,
+                'total_pages': total_pages,
+                'total_items': total_count,
+                'has_next': has_next,
+                'has_previous': has_previous,
+                'next_page': page + 1 if has_next else None,
+                'previous_page': page - 1 if has_previous else None
+            }
+        })
+
+    except Exception as e:
+        logging.error(f"Error getting paginated queue items: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/results')
 def get_results():
     """Get all evidence results with pagination."""
@@ -1588,15 +1699,35 @@ def get_results():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
 
+        # Validate pagination parameters
+        page = max(1, page)
+        per_page = max(1, min(100, per_page))  # Limit per_page to 100
+
         # Calculate offset
         offset = (page - 1) * per_page
 
-        # Get results from database
+        # Get total count and results from database
+        total_count = db_manager.get_evidence_results_count()
         results = db_manager.get_all_evidence_results(per_page, offset)
+
+        # Calculate pagination metadata
+        total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+        has_next = page < total_pages
+        has_previous = page > 1
 
         return jsonify({
             'success': True,
-            'data': results
+            'data': results,
+            'pagination': {
+                'current_page': page,
+                'per_page': per_page,
+                'total_pages': total_pages,
+                'total_items': total_count,
+                'has_next': has_next,
+                'has_previous': has_previous,
+                'next_page': page + 1 if has_next else None,
+                'previous_page': page - 1 if has_previous else None
+            }
         })
 
     except Exception as e:
