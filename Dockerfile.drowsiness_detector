@@ -3,7 +3,7 @@ FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
 # Note: Using CUDA 12.1 base image which is compatible with CUDA 12.4 installations
 # PyTorch doesn't have an official image with CUDA 12.4 yet, but 12.1 is compatible
 
-# Install system dependencies
+# Install system dependencies and uvicorn
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -13,6 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Install uvicorn
+RUN pip install uvicorn
 
 # Set working directory
 WORKDIR /app
