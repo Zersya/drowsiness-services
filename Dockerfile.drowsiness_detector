@@ -63,9 +63,5 @@ VOLUME ["/app/models", "/app/logs", "/app/data"]
 # Set database path to the persistent volume
 ENV DB_PATH=/app/data/drowsiness_detection.db
 
-# Copy the startup script
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
-
-# Run the startup script which will then run the application with ThreadPool support
-CMD ["/app/start.sh"]
+# start drowsiness_detector.py
+CMD ["python", "-m", "uvicorn", "drowsiness_detector:app", "--host", "0.0.0.0", "--port", "8001"]
