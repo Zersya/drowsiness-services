@@ -466,10 +466,15 @@ class PoseHeadDetector:
         # Counters
         self.head_turned_counter = 0
         self.head_down_counter = 0
-        
+
         # Status flags
         self.distracted_head_turn = False
         self.distracted_head_down = False
+
+        # Direction tracking for enhanced head pose detection
+        self.current_head_direction = "center"  # "left", "right", "center"
+        self.direction_stability_counter = 0
+        self.direction_stability_threshold = 3  # Frames needed to confirm direction change
         
         # Define COCO keypoint indices (from pose_head_detector.py - only needs these three for its logic)
         self.kp_indices = {
@@ -527,6 +532,11 @@ class PoseHeadDetector:
         self.head_down_counter = 0
         self.distracted_head_turn = False
         self.distracted_head_down = False
+
+        # Reset direction tracking
+        self.current_head_direction = "center"
+        self.direction_stability_counter = 0
+
         logging.debug(f"PoseHeadDetector frame thresholds updated for FPS {self.fps}: "
                      f"Turn Thresh={self.head_turned_frames_threshold} frames, "
                      f"Down Thresh={self.head_down_frames_threshold} frames")
@@ -540,6 +550,7 @@ class PoseHeadDetector:
             logging.warning("Pose model not loaded, returning default pose.")
             return {
                 "head_turned": False, "head_down": False,
+                "head_turn_direction": "center",  # Enhanced: default direction
                 "head_turned_counter": 0, "head_down_counter": 0,
                 "head_turned_threshold": self.head_turned_frames_threshold,
                 "head_down_threshold": self.head_down_frames_threshold
@@ -587,14 +598,33 @@ class PoseHeadDetector:
 
                         # Check eye_dist_x_pixels to prevent division by zero or instability if eyes are too close/same point
                         if eye_dist_x_pixels > 5: # A small threshold for inter-eye distance
-                            nose_deviation_from_center_x = abs(nose_xy[0] - eye_center_x)
+                            nose_deviation_from_center_x = nose_xy[0] - eye_center_x  # Keep sign for direction
+                            abs_nose_deviation = abs(nose_deviation_from_center_x)
+
                             # Calculate current turn ratio
-                            current_turn_ratio = nose_deviation_from_center_x / eye_dist_x_pixels if eye_dist_x_pixels else float('inf')
-                            logging.debug(f"Head Turn Check: eye_dist_x_pixels={eye_dist_x_pixels:.2f}, "
-                                        f"nose_deviation_x={nose_deviation_from_center_x:.2f}, "
-                                        f"current_turn_ratio={current_turn_ratio:.2f} (Threshold: {self.head_turn_ratio_threshold})")
+                            current_turn_ratio = abs_nose_deviation / eye_dist_x_pixels if eye_dist_x_pixels else float('inf')
+
+                            # Determine direction and check if head is significantly turned
+                            detected_direction = "center"
                             if current_turn_ratio > self.head_turn_ratio_threshold:
                                 frame_flag_head_turned = True
+                                # Determine direction: positive deviation = looking right, negative = looking left
+                                detected_direction = "right" if nose_deviation_from_center_x > 0 else "left"
+
+                            # Update direction with stability check to avoid flickering
+                            if detected_direction != self.current_head_direction:
+                                self.direction_stability_counter += 1
+                                if self.direction_stability_counter >= self.direction_stability_threshold:
+                                    self.current_head_direction = detected_direction
+                                    self.direction_stability_counter = 0
+                                    logging.debug(f"Head direction changed to: {detected_direction}")
+                            else:
+                                self.direction_stability_counter = 0
+
+                            logging.debug(f"Head Turn Check: eye_dist_x_pixels={eye_dist_x_pixels:.2f}, "
+                                        f"nose_deviation_x={nose_deviation_from_center_x:.2f}, "
+                                        f"current_turn_ratio={current_turn_ratio:.2f} (Threshold: {self.head_turn_ratio_threshold}), "
+                                        f"direction={detected_direction}, stable_direction={self.current_head_direction}")
 
                         # --- Head Down Check (from pose_head_detector.py) ---
                         eye_center_y = (left_eye_xy[1] + right_eye_xy[1]) / 2.0
@@ -635,6 +665,7 @@ class PoseHeadDetector:
         return {
             "head_turned": self.distracted_head_turn,
             "head_down": self.distracted_head_down,
+            "head_turn_direction": self.current_head_direction,  # Enhanced: direction information
             "head_turned_counter": self.head_turned_counter,
             "head_down_counter": self.head_down_counter,
             "head_turned_threshold": self.head_turned_frames_threshold,
@@ -711,8 +742,9 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
         head_pose = detection_results.get('head_pose', {})
         is_head_turned = head_pose.get('head_turned', False)
         is_head_down = head_pose.get('head_down', False)
+        head_turn_direction = head_pose.get('head_turn_direction', 'center')  # Enhanced: direction info
         # For details, ensure these are available or set to 0 if not.
-        head_turned_frames_val = head_pose.get('head_turned_counter', 0) 
+        head_turned_frames_val = head_pose.get('head_turned_counter', 0)
         head_down_frames_val = head_pose.get('head_down_counter', 0)
 
         if total_frames_input < self.minimum_frames_for_analysis:
@@ -738,6 +770,7 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
                 'is_normal_state_high': False,
                 'is_head_turned': is_head_turned,
                 'is_head_down': is_head_down,
+                'head_turn_direction': head_turn_direction,  # Enhanced: direction info
                 'head_turned_frames': head_turned_frames_val,
                 'head_down_frames': head_down_frames_val,
             }
@@ -792,7 +825,11 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
             if is_head_turned or is_head_down: # Head pose override
                 final_is_drowsy = False
                 final_confidence = 0.0 # Or a small confidence indicating distraction
-                reason_for_drowsiness = 'head_pose_override'
+                # Enhanced: include direction in reason
+                if is_head_turned:
+                    reason_for_drowsiness = f'head_turned_{head_turn_direction}'
+                else:
+                    reason_for_drowsiness = 'head_down'
             else:
                 final_is_drowsy = internal_is_drowsy_eyes or internal_is_drowsy_yawns
 
@@ -856,14 +893,20 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
             'is_normal_state_high': internal_is_normal_state_high,
             'is_head_turned': is_head_turned,
             'is_head_down': is_head_down,
+            'head_turn_direction': head_turn_direction,  # Enhanced: direction info
             'head_turned_frames': head_turned_frames_val,
             'head_down_frames': head_down_frames_val,
         }
         
+        # Enhanced logging with head pose direction information
+        head_pose_info = ""
+        if is_head_turned or is_head_down:
+            head_pose_info = f", head_pose:{head_turn_direction if is_head_turned else 'down'}"
+
         logging.info(
             f"RateBasedAnalyzer (reference-aligned) output: "
             f"is_drowsy:{final_is_drowsy}, confidence:{final_confidence:.2f}, "
-            f"reason:{reason_for_drowsiness}, yawn_count:{yawn_count}"
+            f"reason:{reason_for_drowsiness}, yawn_count:{yawn_count}{head_pose_info}"
         )
 
         return {
@@ -1221,10 +1264,11 @@ class YoloProcessor:
             # --- Construct the output dictionary ---
             # This structure must be compatible with what the third-party platform expects from simplify.py
             
-            # Head pose dict now includes counters for the analyzer
+            # Head pose dict now includes counters and direction for the analyzer
             output_head_pose_dict = {
                 'head_turned': pose_info_dict.get('head_turned', False),
                 'head_down': pose_info_dict.get('head_down', False),
+                'head_turn_direction': pose_info_dict.get('head_turn_direction', 'center'),  # Enhanced: direction info
                 'head_turned_counter': pose_info_dict.get('head_turned_counter', 0),
                 'head_down_counter': pose_info_dict.get('head_down_counter', 0),
                 'head_turned_threshold': pose_info_dict.get('head_turned_threshold', 0), # For context
