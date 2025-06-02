@@ -104,7 +104,7 @@ class ApiClient:
             'startTime': formatted_start_time,
             'endTime': formatted_end_time,
             'pageNum': '1',
-            'pageSize': 180,
+            'pageSize': 10000,
             'token': self.api_token,
             'scheme': 'https',
             'lang': 'en'
