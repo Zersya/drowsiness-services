@@ -31,35 +31,35 @@ services:
     stop_grace_period: 30s
 
 
-  drowsiness-detector:
-    build:
-      context: .
-      dockerfile: Dockerfile.drowsiness_detector
-    image: drowsiness-detector
-    container_name: drowsiness-detector
-    restart: unless-stopped
-    volumes:
-      - ./models:/app/models
-      - ./logs:/app/logs
-      - simplify_db_data:/app/data
-      - ./data:/app/data_host
-    ports:
-      - 8001:8001
-    networks:
-      - proxy
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-          cpus: '4'
-          memory: 6G
-    runtime: nvidia
-    init: true
-    stop_signal: SIGINT
-    stop_grace_period: 30s
+  # drowsiness-detector:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.drowsiness_detector
+  #   image: drowsiness-detector
+  #   container_name: drowsiness-detector
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./models:/app/models
+  #     - ./logs:/app/logs
+  #     - simplify_db_data:/app/data
+  #     - ./data:/app/data_host
+  #   ports:
+  #     - 8001:8001
+  #   networks:
+  #     - proxy
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #         cpus: '4'
+  #         memory: 6G
+  #   runtime: nvidia
+  #   init: true
+  #   stop_signal: SIGINT
+  #   stop_grace_period: 30s
 
 volumes:
   simplify_db_data:

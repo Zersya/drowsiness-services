@@ -15,7 +15,6 @@ from data_manager import DataManager
 from yolo_processor import YoloProcessor
 from api_client import ApiClient
 from drowsiness_analyzer import create_analyzer
-from ml_metrics_analyzer import MLMetricsAnalyzer
 
 # Set up logging first
 logging.basicConfig(
@@ -98,7 +97,6 @@ api_client = ApiClient(
 drowsiness_analyzer = create_analyzer(
     analyzer_type="rate",
 )
-ml_metrics_analyzer = MLMetricsAnalyzer()
 
 def analyze_drowsiness(detection_results):
     """Analyzes detection results to determine drowsiness and ML metrics."""
