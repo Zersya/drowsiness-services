@@ -33,7 +33,7 @@ COPY . .
 RUN mkdir -p models logs data
 
 # Copy model files
-COPY models/jingyeong-best.pt models/
+COPY models/model_21march20256_06.pt models/
 
 # Download YOLOv8 pose model if not already present
 RUN if [ ! -f models/yolov8l-pose.pt ]; then \
