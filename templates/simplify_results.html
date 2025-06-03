@@ -95,6 +95,40 @@
         .video-info strong {
             color: #fff;
         }
+        /* Head pose direction indicators */
+        .head-pose-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .head-pose-left {
+            background-color: #ffeaa7;
+            color: #2d3436;
+        }
+        .head-pose-right {
+            background-color: #fab1a0;
+            color: #2d3436;
+        }
+        .head-pose-center {
+            background-color: #a8e6cf;
+            color: #2d3436;
+        }
+        .head-pose-down {
+            background-color: #fd79a8;
+            color: #2d3436;
+        }
+        .override-reason {
+            background-color: #e17055;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -212,6 +246,7 @@
                                 <th><i class="bx bx-time"></i> Process Time</th>
                                 <th><i class="bx bx-sleepy"></i> Drowsy</th>
                                 <th><i class="bx bx-analyse"></i> Detection</th>
+                                <th><i class="bx bx-face"></i> Head Pose</th>
                                 <th><i class="bx bx-check-circle"></i> Status</th>
                                 <th><i class="bx bx-calendar"></i> Created</th>
                             </tr>
@@ -273,8 +308,12 @@
                                 <p><strong>Yawn Frames:</strong> <span id="videoYawns"></span></p>
                                 <p><strong>Eye Closed Frames:</strong> <span id="videoEyesClosed"></span></p>
                                 <p><strong>Head Turned:</strong> <span id="videoHeadTurned"></span></p>
+                                <p><strong>Head Direction:</strong> <span id="videoHeadDirection"></span></p>
                                 <p><strong>Head Down:</strong> <span id="videoHeadDown"></span></p>
                                 <p><strong>Normal State Frames:</strong> <span id="videoNormalState"></span></p>
+                                <div id="videoOverrideReason" style="display: none;">
+                                    <p><strong>Override Reason:</strong> <span id="videoOverrideReasonText"></span></p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -431,7 +470,7 @@
             if (data.length === 0) {
                 tbody.append(`
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="8" class="text-center text-muted py-4">
                             <i class="bx bx-data"></i> No data available
                         </td>
                     </tr>
@@ -440,13 +479,27 @@
             }
             
             data.forEach(function(item) {
+                // Parse details to get head pose direction and override reason
+                let headDirection = 'center';
+                let overrideReason = '';
+
+                if (item.details) {
+                    try {
+                        const details = typeof item.details === 'string' ? JSON.parse(item.details) : item.details;
+                        headDirection = details.head_turn_direction || 'center';
+                        overrideReason = details.reason || '';
+                    } catch (e) {
+                        console.warn('Failed to parse details:', e);
+                    }
+                }
+
                 const row = `
                     <tr>
                         <td>${item.id || '-'}</td>
                         <td>
                             ${item.video_url ?
                                 `<button type="button" class="btn btn-sm btn-primary"
-                                         onclick="openVideoModal('${item.video_url}', '${item.video_url_channel_3 || ''}', ${item.id}, '${formatDate(item.created_at)}', ${item.yawn_frames || 0}, ${item.eye_closed_frames || 0}, ${item.normal_state_frames || 0}, ${item.is_drowsy}, ${item.process_time || 0}, '${item.processing_status || ''}', ${item.is_head_turned}, ${item.is_head_down})">
+                                         onclick="openVideoModal('${item.video_url}', '${item.video_url_channel_3 || ''}', ${item.id}, '${formatDate(item.created_at)}', ${item.yawn_frames || 0}, ${item.eye_closed_frames || 0}, ${item.normal_state_frames || 0}, ${item.is_drowsy}, ${item.process_time || 0}, '${item.processing_status || ''}', ${item.is_head_turned}, ${item.is_head_down}, '${headDirection}', '${overrideReason}')">
                                     <i class="bx bx-play"></i> Play Video
                                 </button>` :
                                 '<span class="text-muted">No video</span>'
@@ -454,21 +507,23 @@
                         </td>
                         <td>${item.process_time ? parseFloat(item.process_time).toFixed(2) + ' sec' : '-'}</td>
                         <td>
-                            ${item.is_drowsy !== null ? 
+                            ${item.is_drowsy !== null ?
                                 `<span class="badge ${item.is_drowsy ? 'bg-warning' : 'bg-success'}">
                                     ${item.is_drowsy ? 'Yes' : 'No'}
-                                </span>` : 
+                                </span>` :
                                 '-'
                             }
+                            ${getOverrideReasonDisplay(overrideReason)}
                         </td>
                         <td>
                             <small>
-                                ${item.yawn_frames ? `Yawns: ${item.yawn_frames}` : ''}
-                                ${item.eye_closed_frames ? `Eyes: ${item.eye_closed_frames}` : ''}
-                                ${item.normal_state_frames ? `Normal: ${item.normal_state_frames}` : ''}
-                                ${item.is_head_turned ? `Head Turned: Yes` : ''}
-                                ${item.is_head_down ? `Head Down: Yes` : ''}
+                                ${item.yawn_frames ? `<div>Yawns: ${item.yawn_frames}</div>` : ''}
+                                ${item.eye_closed_frames ? `<div>Eyes: ${item.eye_closed_frames}</div>` : ''}
+                                ${item.normal_state_frames ? `<div>Normal: ${item.normal_state_frames}</div>` : ''}
                             </small>
+                        </td>
+                        <td>
+                            ${getHeadPoseDisplay(item.is_head_turned, item.is_head_down, headDirection)}
                         </td>
                         <td>
                             <span class="badge ${getStatusBadgeClass(item.processing_status)}">
@@ -574,12 +629,74 @@
             return date.toLocaleString();
         }
 
+        // Enhanced head pose display function
+        function getHeadPoseDisplay(isHeadTurned, isHeadDown, direction) {
+            let display = '';
+
+            if (isHeadTurned) {
+                const directionIcon = getDirectionIcon(direction);
+                display += `<div class="head-pose-indicator head-pose-${direction}">
+                    ${directionIcon} ${direction.charAt(0).toUpperCase() + direction.slice(1)}
+                </div>`;
+            }
+
+            if (isHeadDown) {
+                display += `<div class="head-pose-indicator head-pose-down mt-1">
+                    <i class="bx bx-down-arrow-alt"></i> Down
+                </div>`;
+            }
+
+            if (!isHeadTurned && !isHeadDown) {
+                display = `<div class="head-pose-indicator head-pose-center">
+                    <i class="bx bx-check-circle"></i> Normal
+                </div>`;
+            }
+
+            return display;
+        }
+
+        // Get direction icon based on head turn direction
+        function getDirectionIcon(direction) {
+            switch (direction) {
+                case 'left': return '<i class="bx bx-left-arrow-alt"></i>';
+                case 'right': return '<i class="bx bx-right-arrow-alt"></i>';
+                case 'center': return '<i class="bx bx-check-circle"></i>';
+                default: return '<i class="bx bx-question-mark"></i>';
+            }
+        }
+
+        // Enhanced override reason display
+        function getOverrideReasonDisplay(reason) {
+            if (!reason) return '';
+
+            let displayText = '';
+            let icon = '';
+
+            if (reason.includes('head_turned_left')) {
+                displayText = 'Override: Head Left';
+                icon = '<i class="bx bx-left-arrow-alt"></i>';
+            } else if (reason.includes('head_turned_right')) {
+                displayText = 'Override: Head Right';
+                icon = '<i class="bx bx-right-arrow-alt"></i>';
+            } else if (reason.includes('head_down')) {
+                displayText = 'Override: Head Down';
+                icon = '<i class="bx bx-down-arrow-alt"></i>';
+            } else if (reason.includes('head_pose_override')) {
+                displayText = 'Override: Head Pose';
+                icon = '<i class="bx bx-face"></i>';
+            } else {
+                return '';
+            }
+
+            return `<div class="mt-1"><span class="override-reason">${icon} ${displayText}</span></div>`;
+        }
+
         // Video modal functions
         let currentVideoChannel2Url = '';
         let currentVideoChannel3Url = '';
         let currentVideoChannel = 2; // Default to channel 2
 
-        function openVideoModal(videoUrl, videoUrlChannel3, id, created, yawns, eyesClosed, normalState, isDrowsy, processTime, status, headTurned, headDown) {
+        function openVideoModal(videoUrl, videoUrlChannel3, id, created, yawns, eyesClosed, normalState, isDrowsy, processTime, status, headTurned, headDown, headDirection, overrideReason) {
             // Store both video URLs
             currentVideoChannel2Url = videoUrl || '';
             currentVideoChannel3Url = videoUrlChannel3 || '';
@@ -618,9 +735,34 @@
             document.getElementById('videoDrowsy').innerHTML = isDrowsy !== null ? `<span class="badge ${isDrowsy ? 'bg-warning' : 'bg-success'}">${isDrowsy ? 'Yes' : 'No'}</span>` : '-';
             document.getElementById('videoYawns').textContent = yawns || '0';
             document.getElementById('videoEyesClosed').textContent = eyesClosed || '0';
-            document.getElementById('videoHeadTurned').textContent = headTurned || '0';
-            document.getElementById('videoHeadDown').textContent = headDown || '0';
+            // Enhanced head pose display in modal
+            document.getElementById('videoHeadTurned').innerHTML = headTurned ?
+                `<span class="badge bg-warning">Yes</span>` :
+                `<span class="badge bg-success">No</span>`;
+
+            // Display head direction with visual indicator
+            const directionDisplay = headDirection ?
+                `<span class="head-pose-indicator head-pose-${headDirection || 'center'}">
+                    ${getDirectionIcon(headDirection || 'center')} ${(headDirection || 'center').charAt(0).toUpperCase() + (headDirection || 'center').slice(1)}
+                </span>` :
+                '<span class="text-muted">-</span>';
+            document.getElementById('videoHeadDirection').innerHTML = directionDisplay;
+
+            document.getElementById('videoHeadDown').innerHTML = headDown ?
+                `<span class="badge bg-warning">Yes</span>` :
+                `<span class="badge bg-success">No</span>`;
             document.getElementById('videoNormalState').textContent = normalState || '0';
+
+            // Display override reason if present
+            const overrideReasonDiv = document.getElementById('videoOverrideReason');
+            const overrideReasonText = document.getElementById('videoOverrideReasonText');
+
+            if (overrideReason && (overrideReason.includes('head_turned') || overrideReason.includes('head_down') || overrideReason.includes('head_pose'))) {
+                overrideReasonText.innerHTML = getOverrideReasonDisplay(overrideReason);
+                overrideReasonDiv.style.display = 'block';
+            } else {
+                overrideReasonDiv.style.display = 'none';
+            }
 
             // Show modal
             const videoModal = new bootstrap.Modal(document.getElementById('videoModal'));
