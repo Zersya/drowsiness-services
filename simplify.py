@@ -699,9 +699,9 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
     These changes restore the 82% precision of the reference implementation.
     """
 
-    def __init__(self, eye_closed_percentage_threshold=5, yawn_rate_threshold=3,
-                 normal_state_threshold=60, fps=20, max_closure_duration_threshold=0.3,
-                 minimum_yawn_threshold=1, minimum_eye_closed_threshold=3,
+    def __init__(self, eye_closed_percentage_threshold=7, yawn_rate_threshold=3,
+                 normal_state_threshold=65, fps=20, max_closure_duration_threshold=0.5,
+                 minimum_yawn_threshold=2, minimum_eye_closed_threshold=3,
                  minimum_frames_for_analysis=10):
         """
         Initialize with thresholds matching the reference implementation for 82% precision.
@@ -822,14 +822,16 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
             final_confidence = 0.05 # Very low confidence for normal state override
             reason_for_drowsiness = 'high_normal_state_no_other_indicators'
         else:
-            if is_head_turned or is_head_down: # Head pose override
-                final_is_drowsy = False
-                final_confidence = 0.0 # Or a small confidence indicating distraction
+            head_pose_factor = 1.0
+            if is_head_turned or is_head_down: # Head pose affects confidence
+                head_pose_factor = 0.25 # Reduce confidence significantly if head is not straight
                 # Enhanced: include direction in reason
                 if is_head_turned:
-                    reason_for_drowsiness = f'head_turned_{head_turn_direction}'
+                    reason_for_drowsiness = f'head_turned_{head_turn_direction}_confidence_reduced'
                 else:
-                    reason_for_drowsiness = 'head_down'
+                    reason_for_drowsiness = 'head_down_confidence_reduced'
+                # Drowsiness is initially determined by eyes/yawns
+                final_is_drowsy = internal_is_drowsy_eyes or internal_is_drowsy_yawns
             else:
                 final_is_drowsy = internal_is_drowsy_eyes or internal_is_drowsy_yawns
 
@@ -851,10 +853,19 @@ class RateBasedAnalyzer(DrowsinessAnalyzer):
                 # Quadratic normal state penalty as in reference
                 normal_state_factor = (1 - (internal_normal_state_percentage / 100)) ** 2
                 calculated_confidence *= normal_state_factor
+
+            # Apply head pose factor
+            calculated_confidence *= head_pose_factor
             
             final_confidence = calculated_confidence
 
-            if not reason_for_drowsiness: # If not set by head_pose_override
+            # Update reason if head pose was the primary reason for low confidence leading to non-drowsy
+            if (is_head_turned or is_head_down) and final_is_drowsy and final_confidence < 0.15:
+                if is_head_turned:
+                    reason_for_drowsiness = f'head_turned_{head_turn_direction}_override_low_confidence'
+                else:
+                    reason_for_drowsiness = 'head_down_override_low_confidence'
+            elif not reason_for_drowsiness: # If not set by head_pose logic earlier
                 reason_for_drowsiness = 'drowsy_indicators_present' if final_is_drowsy else 'no_significant_indicators'
 
             # Confidence threshold matching reference implementation
@@ -950,13 +961,13 @@ class YoloProcessor:
         self.model = self.load_model()
 
         # Confidence thresholds matching reference implementation for 82% precision
-        self.eye_closed_confidence = float(os.getenv('EYE_CLOSED_CONFIDENCE', '0.6'))
-        self.yawn_confidence = float(os.getenv('YAWN_CONFIDENCE', '0.6'))
+        self.eye_closed_confidence = float(os.getenv('EYE_CLOSED_CONFIDENCE', '0.75'))
+        self.yawn_confidence = float(os.getenv('YAWN_CONFIDENCE', '0.7'))
         self.normal_state_confidence = float(os.getenv('NORMAL_STATE_CONFIDENCE', '0.6'))
 
         # Blink detection parameters matching reference implementation
-        self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '1'))  # Single frame detection as in reference
-        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '2'))    # Shorter cooldown as in reference
+        self.min_blink_frames = int(os.getenv('MIN_BLINK_FRAMES', '2'))  # Single frame detection as in reference
+        self.blink_cooldown = int(os.getenv('BLINK_COOLDOWN', '5'))    # Shorter cooldown as in reference
 
         # Initialize pose detector (simplify.py's PoseHeadDetector is used)
         # It sources its own model path via os.getenv("POSE_MODEL_PATH", "yolov8l-pose.pt")
