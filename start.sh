@@ -119,15 +119,15 @@ trap 'handle_signal SIGINT' SIGINT   # Handle interrupt signal (Ctrl+C)
 # Start Python processes in the background and store their PIDs
 echo "Starting Python processes..."
 
-echo "Starting drowsiness_detector.py..."
-python drowsiness_detector.py &
-PID_DROWSINESS=$! # Get PID of the last backgrounded process
-echo "drowsiness_detector.py started with PID: $PID_DROWSINESS"
+# echo "Starting drowsiness_detector.py..."
+# python drowsiness_detector.py &
+# PID_DROWSINESS=$! # Get PID of the last backgrounded process
+# echo "drowsiness_detector.py started with PID: $PID_DROWSINESS"
 
-echo "Starting web_server.py..."
-python web_server.py &
-PID_WEBSERVER=$!
-echo "web_server.py started with PID: $PID_WEBSERVER"
+# echo "Starting web_server.py..."
+# python web_server.py &
+# PID_WEBSERVER=$!
+# echo "web_server.py started with PID: $PID_WEBSERVER"
 
 echo "Starting simplify.py..."
 python simplify.py &
