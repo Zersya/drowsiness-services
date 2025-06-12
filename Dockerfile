@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir opencv-python-headless
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Verify dlib installation
-RUN python -c "import dlib; print('dlib version:', dlib.DLIB_VERSION)"
+RUN python -c "import dlib; print('dlib version:', dlib.__version__)"
 
 # Copy all files in project
 COPY . .
