@@ -92,4 +92,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${LANDMARK_PORT}/ || exit 1
 
 # Run the landmark system directly
-CMD ["python", "start_landmark_system.py", "--port", "${LANDMARK_PORT}", "--workers", "${LANDMARK_MAX_WORKERS}"]
+CMD ["python", "start_landmark_system.py", "--port", LANDMARK_PORT, "--workers", LANDMARK_MAX_WORKERS]
