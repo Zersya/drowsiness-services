@@ -13,27 +13,5 @@ numpy>=1.24.0
 dlib>=19.24.0
 scipy>=1.11.0
 
-# Database
-sqlite3  # Built-in with Python
-
-# Concurrent processing
-concurrent.futures  # Built-in with Python
-threading  # Built-in with Python
-
-# Utilities
-hashlib  # Built-in with Python
-tempfile  # Built-in with Python
-time  # Built-in with Python
-datetime  # Built-in with Python
-json  # Built-in with Python
-os  # Built-in with Python
-logging  # Built-in with Python
-signal  # Built-in with Python
-abc  # Built-in with Python
-typing  # Built-in with Python
-dataclasses  # Built-in with Python (Python 3.7+)
-argparse  # Built-in with Python
-
-# Optional: For enhanced performance
-# cmake>=3.18.0  # Required for dlib compilation
-# boost>=1.70.0  # Required for dlib compilation
+# Note: All other dependencies (sqlite3, concurrent.futures, threading, etc.)
+# are built-in Python modules and don't need to be installed via pip

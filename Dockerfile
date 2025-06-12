@@ -1,6 +1,6 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
-# Using lightweight Python base image since landmark detection doesn't require PyTorch/CUDA
+# Using Python 3.11 for better package compatibility with landmark detection libraries
 
 # Install system dependencies for landmark detection
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     libboost-all-dev \
     build-essential \
+    pkg-config \
+    libopenblas-dev \
+    liblapack-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -23,14 +26,14 @@ WORKDIR /app
 # Copy requirements file
 COPY requirements.txt .
 
+# Install additional dependencies for landmark detection first
+RUN pip install --no-cache-dir opencv-python-headless
+
 # Install Python dependencies for landmark system
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install additional dependencies for landmark detection
-RUN pip install --no-cache-dir opencv-python-headless
-
-# Install dlib with optimizations (this may take a while)
-RUN pip install --no-cache-dir dlib
+# Verify dlib installation
+RUN python -c "import dlib; print('dlib version:', dlib.DLIB_VERSION)"
 
 # Copy all files in project
 COPY . .

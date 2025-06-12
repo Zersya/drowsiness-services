@@ -1,10 +1,11 @@
 #!/bin/bash
 
 echo "Starting Landmark-based Drowsiness Detection System..."
-echo "Container optimized for CPU-based facial landmark detection"
+echo "Container optimized for CPU-based facial landmark detection (Python 3.11)"
 
-# Check Python and required packages
-python -c "import cv2, dlib, numpy, scipy, flask; print('All required packages available')" || echo "Warning: Some packages may be missing"
+# Check Python version and required packages
+python --version
+python -c "import cv2, dlib, numpy, scipy, flask; print('✅ All required packages available')" || echo "❌ Warning: Some packages may be missing"
 
 # Ensure data directories exist and have the right permissions
 mkdir -p /app/data
