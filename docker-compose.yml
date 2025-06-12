@@ -1,69 +1,45 @@
 services:
-  simplify-drowsiness-detector:
+  landmark-drowsiness-detector:
     build:
       context: .
       dockerfile: Dockerfile
-    image: simplify-drowsiness-detector
-    container_name: simplify-drowsiness-detector
+    image: landmark-drowsiness-detector
+    container_name: landmark-drowsiness-detector
     restart: unless-stopped
+    labels:
+      - "com.mdvr.service=landmark-drowsiness-detector"
+      - "com.mdvr.version=1.0"
     volumes:
-      - ./models:/app/models
       - ./logs:/app/logs
-      - simplify_db_data:/app/data
+      - landmark_db_data:/app/data
       - ./data:/app/data_host
     ports:
-      - 8002:8002
-      - 8000:8000
+      - 8003:8003
     networks:
       - proxy
+    environment:
+      - LANDMARK_PORT=8003
+      - LANDMARK_HOST=0.0.0.0
+      - LANDMARK_MAX_WORKERS=1
+      - LANDMARK_QUEUE_CHECK_INTERVAL=5
+      - LANDMARK_DB_PATH=/app/data/landmark_detection.db
+      - LANDMARK_FRAME_SKIP=2
+      - LANDMARK_EAR_THRESHOLD=0.25
+      - LANDMARK_PERCLOS_THRESHOLD=0.30
+      - LANDMARK_FATIGUE_THRESHOLD=0.60
+      - LANDMARK_PERCLOS_WINDOW_SECONDS=1.5
     deploy:
       resources:
         reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-          cpus: '4'
-          memory: 6G
-    runtime: nvidia
+          cpus: '2'
+          memory: 4G
     init: true
     stop_signal: SIGINT
     stop_grace_period: 30s
 
-
-  # drowsiness-detector:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.drowsiness_detector
-  #   image: drowsiness-detector
-  #   container_name: drowsiness-detector
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ./models:/app/models
-  #     - ./logs:/app/logs
-  #     - simplify_db_data:/app/data
-  #     - ./data:/app/data_host
-  #   ports:
-  #     - 8001:8001
-  #   networks:
-  #     - proxy
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: all
-  #             capabilities: [gpu]
-  #         cpus: '4'
-  #         memory: 6G
-  #   runtime: nvidia
-  #   init: true
-  #   stop_signal: SIGINT
-  #   stop_grace_period: 30s
-
 volumes:
-  simplify_db_data:
-    name: simplify_db_data
+  landmark_db_data:
+    name: landmark_db_data
 
 networks:
   proxy:

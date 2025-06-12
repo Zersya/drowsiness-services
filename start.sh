@@ -1,13 +1,10 @@
 #!/bin/bash
 
-echo "Checking CUDA version..."
-echo "Container is configured for CUDA 12.1, compatible with host CUDA 12.4"
+echo "Starting Landmark-based Drowsiness Detection System..."
+echo "Container optimized for CPU-based facial landmark detection"
 
-# Check for nvcc and print its version if found
-nvcc --version || echo "NVCC not found, but container will still run with CPU support"
-
-# Check PyTorch and CUDA availability
-python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A'); print('PyTorch version:', torch.__version__)"
+# Check Python and required packages
+python -c "import cv2, dlib, numpy, scipy, flask; print('All required packages available')" || echo "Warning: Some packages may be missing"
 
 # Ensure data directories exist and have the right permissions
 mkdir -p /app/data
@@ -16,34 +13,28 @@ chmod -R 777 /app/data
 chmod -R 777 /app/logs
 echo "Data directories created and permissions set"
 
-echo "Starting application with ThreadPool support (MAX_WORKERS=$MAX_WORKERS)..."
+echo "Starting landmark system with worker support (LANDMARK_MAX_WORKERS=${LANDMARK_MAX_WORKERS:-1})..."
 
-# Set environment variables to optimize for worker threads
+# Set environment variables to optimize for landmark processing
 export PYTHONTHREADDEBUG=1
 export PYTHONFAULTHANDLER=1
 
-# PIDs of the Python processes
-PID_DROWSINESS=""
-PID_WEBSERVER=""
-PID_SIMPLIFY=""
+# PID of the landmark process
+PID_LANDMARK=""
 
-# Function to handle signals and pass them to the Python processes
+# Function to handle signals and pass them to the landmark process
 function handle_signal() {
     SIGNAL_TYPE=$1 # e.g., SIGINT, SIGTERM
-    echo "Received signal $SIGNAL_TYPE. Forwarding to Python processes..."
+    echo "Received signal $SIGNAL_TYPE. Forwarding to landmark process..."
 
     # Identify PIDs that were active at the time of signal
     # These are the processes we will attempt to terminate gracefully
     PIDS_TO_SIGNAL_AND_MONITOR=()
-    # Check if PID_DROWSINESS is set and the process is running
-    [ ! -z "$PID_DROWSINESS" ] && kill -0 "$PID_DROWSINESS" 2>/dev/null && PIDS_TO_SIGNAL_AND_MONITOR+=("$PID_DROWSINESS")
-    # Check if PID_WEBSERVER is set and the process is running
-    [ ! -z "$PID_WEBSERVER" ] && kill -0 "$PID_WEBSERVER" 2>/dev/null && PIDS_TO_SIGNAL_AND_MONITOR+=("$PID_WEBSERVER")
-    # Check if PID_SIMPLIFY is set and the process is running
-    [ ! -z "$PID_SIMPLIFY" ] && kill -0 "$PID_SIMPLIFY" 2>/dev/null && PIDS_TO_SIGNAL_AND_MONITOR+=("$PID_SIMPLIFY")
+    # Check if PID_LANDMARK is set and the process is running
+    [ ! -z "$PID_LANDMARK" ] && kill -0 "$PID_LANDMARK" 2>/dev/null && PIDS_TO_SIGNAL_AND_MONITOR+=("$PID_LANDMARK")
 
     if [ ${#PIDS_TO_SIGNAL_AND_MONITOR[@]} -eq 0 ]; then
-        echo "No active Python processes to signal."
+        echo "No active landmark process to signal."
         return # Exit the handler
     fi
 
@@ -116,40 +107,28 @@ function handle_signal() {
 trap 'handle_signal SIGTERM' SIGTERM # Handle termination signal
 trap 'handle_signal SIGINT' SIGINT   # Handle interrupt signal (Ctrl+C)
 
-# Start Python processes in the background and store their PIDs
-echo "Starting Python processes..."
+# Start landmark system process in the background and store its PID
+echo "Starting landmark system process..."
 
-echo "Starting drowsiness_detector.py..."
-python drowsiness_detector.py &
-PID_DROWSINESS=$! # Get PID of the last backgrounded process
-echo "drowsiness_detector.py started with PID: $PID_DROWSINESS"
-
-echo "Starting web_server.py..."
-python web_server.py &
-PID_WEBSERVER=$!
-echo "web_server.py started with PID: $PID_WEBSERVER"
-
-echo "Starting simplify.py..."
-python simplify.py &
-PID_SIMPLIFY=$!
-echo "simplify.py started with PID: $PID_SIMPLIFY"
+echo "Starting landmark system..."
+python start_landmark_system.py --port ${LANDMARK_PORT:-8003} --workers ${LANDMARK_MAX_WORKERS:-1} &
+PID_LANDMARK=$!
+echo "landmark system started with PID: $PID_LANDMARK"
 
 
-# Wait for all Python processes to finish
-# Collect all PIDs that were successfully assigned
+# Wait for landmark process to finish
+# Collect PID that was successfully assigned
 PIDS_TO_WAIT_FOR=()
-[ ! -z "$PID_DROWSINESS" ] && PIDS_TO_WAIT_FOR+=("$PID_DROWSINESS")
-[ ! -z "$PID_WEBSERVER" ] && PIDS_TO_WAIT_FOR+=("$PID_WEBSERVER")
-[ ! -z "$PID_SIMPLIFY" ] && PIDS_TO_WAIT_FOR+=("$PID_SIMPLIFY")
+[ ! -z "$PID_LANDMARK" ] && PIDS_TO_WAIT_FOR+=("$PID_LANDMARK")
 
 if [ ${#PIDS_TO_WAIT_FOR[@]} -gt 0 ]; then
-    echo "Waiting for all Python processes to complete: [${PIDS_TO_WAIT_FOR[@]}]"
-    # The 'wait' command will block until all specified PIDs have terminated.
-    # If a signal handler terminates them, 'wait' will then return.
+    echo "Waiting for landmark process to complete: [${PIDS_TO_WAIT_FOR[@]}]"
+    # The 'wait' command will block until the specified PID has terminated.
+    # If a signal handler terminates it, 'wait' will then return.
     wait "${PIDS_TO_WAIT_FOR[@]}"
-    echo "All Python processes have completed."
+    echo "Landmark process has completed."
 else
-    echo "No Python processes were started or they exited immediately."
+    echo "No landmark process was started or it exited immediately."
 fi
 
 echo "Script finished."

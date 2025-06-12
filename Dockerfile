@@ -1,9 +1,8 @@
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+FROM python:3.9-slim
 
-# Note: Using CUDA 12.1 base image which is compatible with CUDA 12.4 installations
-# PyTorch doesn't have an official image with CUDA 12.4 yet, but 12.1 is compatible
+# Using lightweight Python base image since landmark detection doesn't require PyTorch/CUDA
 
-# Install system dependencies
+# Install system dependencies for landmark detection
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -12,6 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender-dev \
     ffmpeg \
     wget \
+    curl \
+    cmake \
+    libboost-all-dev \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -20,48 +23,43 @@ WORKDIR /app
 # Copy requirements file
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install Python dependencies for landmark system
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install additional dependencies that might be needed for simplify.py
+# Install additional dependencies for landmark detection
 RUN pip install --no-cache-dir opencv-python-headless
+
+# Install dlib with optimizations (this may take a while)
+RUN pip install --no-cache-dir dlib
 
 # Copy all files in project
 COPY . .
 
-# Create directories
-RUN mkdir -p models logs data
+# Create directories for landmark system
+RUN mkdir -p logs data
 
-# Copy model files
-COPY models/jingyeong-best.pt models/
-
-# Download YOLOv8 pose model if not already present
-RUN if [ ! -f models/yolov8l-pose.pt ]; then \
-    echo "Downloading YOLOv8 pose model..." && \
-    python -c "from ultralytics import YOLO; YOLO('yolov8l-pose.pt')" && \
-    mv yolov8l-pose.pt models/ || \
-    wget -q https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l-pose.pt -O models/yolov8l-pose.pt; \
+# Download dlib facial landmark predictor if not already present
+RUN if [ ! -f shape_predictor_68_face_landmarks.dat ]; then \
+    echo "Downloading dlib facial landmark predictor..." && \
+    wget -q http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2 && \
+    bunzip2 shape_predictor_68_face_landmarks.dat.bz2; \
     fi
 
-# Set environment variables
-ENV YOLO_MODEL_PATH=models/jingyeong-best.pt
-ENV POSE_MODEL_PATH=models/yolov8l-pose.pt
-# Enable CUDA support - will use CUDA 12.4 from the host if available
-ENV USE_CUDA=true
-# Use first GPU
-ENV CUDA_VISIBLE_DEVICES=0
+# Landmark API configuration
+ENV LANDMARK_PORT=8003
+ENV LANDMARK_HOST=0.0.0.0
 
-# Define ports for each application
-# Ensure these environment variables are used by your Python applications to bind to the correct ports
-ENV WEB_SERVER_PORT=8000         
-ENV SIMPLIFY_PORT=8002           
+# Landmark system specific settings
+ENV LANDMARK_MAX_WORKERS=1
+ENV LANDMARK_QUEUE_CHECK_INTERVAL=5
+ENV LANDMARK_DB_PATH=/app/data/landmark_detection.db
 
-# Configure ThreadPool settings
-# Number of concurrent video processing workers
-ENV MAX_WORKERS=4
-
-# Seconds between queue checks
-ENV QUEUE_CHECK_INTERVAL=5
+# Landmark detection thresholds
+ENV LANDMARK_FRAME_SKIP=2
+ENV LANDMARK_EAR_THRESHOLD=0.25
+ENV LANDMARK_PERCLOS_THRESHOLD=0.30
+ENV LANDMARK_FATIGUE_THRESHOLD=0.60
+ENV LANDMARK_PERCLOS_WINDOW_SECONDS=1.5
 
 # Ensure proper signal handling in Docker
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -69,22 +67,26 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Ensure Python output is unbuffered for better logging
 ENV PYTHONUNBUFFERED=1
 
-# Expose ports
-# Replace 8000 and 8001 with the actual ports your applications use
-EXPOSE ${WEB_SERVER_PORT}
-EXPOSE ${SIMPLIFY_PORT}
-# Alternatively, you can list them on one line: EXPOSE 8000 8001 8002
+# Expose landmark API port
+EXPOSE ${LANDMARK_PORT}
 
 # Create volume for persistent storage
-# This ensures that the database file, models, and logs persist across container restarts
-VOLUME ["/app/models", "/app/logs", "/app/data"]
+# This ensures that the database file and logs persist across container restarts
+VOLUME ["/app/logs", "/app/data"]
 
 # Set database path to the persistent volume
-ENV DB_PATH=/app/data/simplify_detection.db
+ENV LANDMARK_DB_PATH=/app/data/landmark_detection.db
+
+# Create landmark-specific directories
+RUN mkdir -p /app/data
 
 # Copy the startup script
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
-# Run the startup script which will then run the application with ThreadPool support
-CMD ["/app/start.sh"]
+# Add health check for landmark service
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${LANDMARK_PORT}/ || exit 1
+
+# Run the landmark system directly
+CMD ["python", "start_landmark_system.py", "--port", "8003", "--workers", "1"]

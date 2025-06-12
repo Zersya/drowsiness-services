@@ -1,205 +1,226 @@
-# Drowsiness Detection Service
+# Landmark-based Drowsiness Detection System
 
-A service that analyzes video feeds to detect driver drowsiness using computer vision and customizable analysis algorithms.
-
-![Dashboard](/images/dashboard.png)
-
-## Requirements
-
-- Python 3.12 or higher
-- pip package manager
-- Virtual environment (recommended)
-
-## How to use
-
-1. Clone the repository: `git clone https://github.com/Zersya/drowsiness-services.git`
-2. Navigate to the project directory: `cd drowsiness-detection-service`
-3. Install the required packages: `pip install -r requirements.txt`
-4. Set up your environment variables in a `.env` file. You can use the provided `.env.example` as a template.
-5. Run the service: `python drowsiness_detector.py`
-6. Start the web server: `python web_server.py`
-7. Access the dashboard at `http://localhost:5000`
-8. Login using either PIN or Keycloak credentials (based on your configuration)
+A modular drowsiness detection system based on facial landmarks and PERCLOS analysis, designed to maintain compatibility with the existing `simplify.py` architecture while using landmark-based detection instead of YOLO-based detection.
 
 ## Features
 
-- Flexible authentication system (PIN-based or Keycloak SSO)
-- Real-time drowsiness detection using YOLO-based computer vision
-- Multiple analysis algorithms (Threshold-based, Rate-based, and Probabilistic)
-- Performance monitoring dashboard with confusion matrix
-- Support for multiple video sources and devices
-- Fleet management capabilities
-- Customizable drowsiness thresholds
-- ML metrics tracking and analysis
+- **Facial Landmark Detection**: Uses dlib's 68-point facial landmark detector
+- **PERCLOS Analysis**: Percentage of Eye Closure over time
+- **Eye Aspect Ratio (EAR)**: Real-time eye closure detection
+- **Blink Frequency Analysis**: Monitors blink patterns for drowsiness indicators
+- **Queue-based Processing**: Handles multiple video processing requests
+- **Webhook Notifications**: Real-time notifications for processing status
+- **RESTful API**: Compatible with existing API interfaces
+- **SQLite Database**: Persistent storage for results and queue management
 
-## Environment Variables
+## Architecture
 
-Create a `.env` file with the following variables:
+The system is split into modular components for better maintainability:
 
-```env
-# API Configuration
-BASE_URL=you_url
-API_ENDPOINT=third_party_services
-API_TOKEN=your_api_token
-USERNAME=your_username
-PASSWORD=your_password
-
-# Model Configuration
-YOLO_MODEL_PATH=models/best.pt
-USE_CUDA=false
-
-# Detection Parameters
-FETCH_INTERVAL_SECONDS=20
-MIN_BLINK_FRAMES=1
-BLINK_COOLDOWN=5
-EYE_DETECTION_CONFIDENCE=0.5
-
-# Authentication Configuration
-AUTH_TYPE=PIN  # Options: PIN or KEYCLOAK
-WEB_ACCESS_PIN=123456  # Only used if AUTH_TYPE=PIN
-
-# Keycloak Configuration (Only used if AUTH_TYPE=KEYCLOAK)
-KEYCLOAK_URL=https://your-keycloak-server/auth
-KEYCLOAK_REALM=your-realm
-KEYCLOAK_CLIENT_ID=your-client-id
-KEYCLOAK_CLIENT_SECRET=your-client-secret
+```
+landmark_api.py          # Main Flask API endpoints
+landmark_database.py     # Database operations
+landmark_processor.py    # Landmark-based drowsiness detection
+landmark_analyzer.py     # Analysis logic for landmark results
+landmark_queue.py        # Queue management
+landmark_webhook.py      # Webhook dispatch
+landmark_worker.py       # Worker logic for processing videos
 ```
 
-## Security Features
+## Installation
 
-### Dashboard Authentication
+1. **Install Python dependencies**:
+   ```bash
+   pip install -r landmark_requirements.txt
+   ```
 
-The service supports two authentication methods:
+2. **Install dlib dependencies** (if not already installed):
+   ```bash
+   # On Ubuntu/Debian
+   sudo apt-get install cmake libboost-all-dev
 
-#### 1. PIN-based Authentication
-- Simple 6-digit PIN access
-- Secure session management
-- Automatic session expiration
-- Protection against brute force attempts
-- Configurable PIN through environment variables
+   # On macOS
+   brew install cmake boost
 
-To use PIN authentication:
-```env
-AUTH_TYPE=PIN
-WEB_ACCESS_PIN=123456  # Your chosen PIN
+   # On Windows
+   # Install Visual Studio Build Tools and cmake
+   ```
+
+3. **Download the facial landmark predictor**:
+   The system will automatically download `shape_predictor_68_face_landmarks.dat` on first run, or you can download it manually:
+   ```bash
+   wget http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
+   bunzip2 shape_predictor_68_face_landmarks.dat.bz2
+   ```
+
+## Configuration
+
+Copy `landmark_config.env` to `.env` and adjust settings as needed:
+
+```bash
+cp landmark_config.env .env
 ```
 
-#### 2. Keycloak SSO Authentication
-- Enterprise-grade Single Sign-On
-- Role-based access control
-- Token-based authentication
-- Automatic token refresh
-- Secure session management
+Key configuration options:
+- `LANDMARK_PORT`: API server port (default: 8003)
+- `LANDMARK_MAX_WORKERS`: Maximum concurrent video processing workers
+- `EAR_THRESHOLD`: Eye Aspect Ratio threshold for closed eyes (default: 0.25)
+- `PERCLOS_THRESHOLD`: PERCLOS threshold for drowsiness (default: 0.30)
+- `FATIGUE_THRESHOLD`: Overall fatigue threshold (default: 0.60)
 
-To use Keycloak authentication:
-```env
-AUTH_TYPE=KEYCLOAK
-KEYCLOAK_URL=https://your-keycloak-server/auth
-KEYCLOAK_REALM=your-realm
-KEYCLOAK_CLIENT_ID=your-client-id
-KEYCLOAK_CLIENT_SECRET=your-client-secret
+## Usage
+
+### Starting the Server
+
+```bash
+python landmark_api.py
 ```
 
-### Keycloak Setup
+The API will be available at `http://localhost:8003`
 
-1. Create a new client in your Keycloak realm
-2. Set the client protocol to "openid-connect"
-3. Configure the client settings:
-   - Access Type: confidential
-   - Valid Redirect URIs: http://localhost:5000/*
-   - Web Origins: http://localhost:5000
-4. Copy the client secret from the Credentials tab
-5. Update your `.env` file with the Keycloak configuration
+### API Endpoints
 
-## Implementation Details
+#### Process a Video
+```bash
+POST /api/process
+Content-Type: application/json
 
-### Analyzer Configuration
-The service uses the Rate-Based Analyzer by default, configured in `drowsiness_detector.py`:
-
-```python
-drowsiness_analyzer = create_analyzer(
-    analyzer_type="rate",
-    yawn_threshold=DROWSINESS_THRESHOLD_YAWN,
-    eye_closed_threshold=DROWSINESS_THRESHOLD_EYE_CLOSED
-)
+{
+    "video_url": "https://example.com/video.mp4"
+}
 ```
 
-This configuration uses environment variables to set the thresholds:
-- `DROWSINESS_THRESHOLD_YAWN`: Number of yawns that indicate drowsiness
-- `DROWSINESS_THRESHOLD_EYE_CLOSED`: Number of frames with closed eyes that indicate drowsiness
-
-To use a different analyzer, modify the `analyzer_type` parameter to one of:
-- `"threshold"` for ThresholdBasedAnalyzer
-- `"rate"` for RateBasedAnalyzer
-- `"probabilistic"` for ProbabilisticAnalyzer
-
-## Available Analyzers
-
-1. **ThresholdBasedAnalyzer** (Basic)
-   - Uses simple thresholds for yawns and closed eyes
-   - Configuration:
-     - `yawn_threshold`: Number of yawns indicating drowsiness
-     - `eye_closed_threshold`: Number of frames with closed eyes indicating drowsiness
-
-2. **RateBasedAnalyzer** (Advanced)
-   - Uses time-based analysis of eye closure and yawn frequency
-   - Configuration:
-     - `eye_closed_percentage_threshold`: Percentage of time eyes closed
-     - `yawn_rate_threshold`: Yawns per minute
-     - `fps`: Frames per second
-
-3. **ProbabilisticAnalyzer** (Experimental)
-   - Uses sigmoid function for probability-based detection
-   - Configuration:
-     - `a`: Weight for yawn rate
-     - `b`: Weight for eye closure ratio
-     - `c`: Threshold shift
-
-## Creating a Custom Analyzer
-
-1. Create a new class that inherits from `DrowsinessAnalyzer`:
-
-```python
-from drowsiness_analyzer import DrowsinessAnalyzer
-
-class CustomAnalyzer(DrowsinessAnalyzer):
-    def __init__(self, custom_param1, custom_param2):
-        self.param1 = custom_param1
-        self.param2 = custom_param2
-
-    def analyze(self, yawn_count, eye_closed_frames, total_frames):
-        # Implement your custom analysis logic here
-        return {
-            'is_drowsy': bool,  # Required
-            'confidence': float,  # Required (0-1)
-            'details': dict  # Required (custom details)
-        }
+#### Check Processing Status
+```bash
+GET /api/queue/{queue_id}
 ```
 
-2. Register your analyzer in `create_analyzer`:
-
-```python
-def create_analyzer(analyzer_type="threshold", **kwargs):
-    if analyzer_type == "custom":
-        return CustomAnalyzer(
-            kwargs.get('custom_param1'),
-            kwargs.get('custom_param2')
-        )
+#### Get Results
+```bash
+GET /api/result/{evidence_id}
 ```
 
-## Performance Monitoring
+#### Manage Webhooks
+```bash
+# List webhooks
+GET /api/webhook
 
-The dashboard provides real-time monitoring of:
-- Processed/Pending/Failed events
-- Confusion matrix
-- Accuracy and sensitivity metrics
-- Device and fleet statistics
-- Video playback with detection details
+# Add webhook
+POST /api/webhook
+{
+    "url": "https://your-webhook-url.com/endpoint"
+}
 
-## Contributing
+# Delete webhook
+DELETE /api/webhook
+{
+    "webhook_id": 1
+}
+```
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-analyzer`)
-3. Commit your changes (`git commit -m 'Add amazing analyzer'`)
-4. Push to the branch (`git push origin feature/amazing-analyzer`)
-5. Open a Pull Request
+## Detection Method
+
+The landmark-based system uses:
+
+1. **Facial Landmark Detection**: 68-point facial landmarks using dlib
+2. **Eye Aspect Ratio (EAR)**: Calculated from eye landmark coordinates
+3. **PERCLOS**: Percentage of time eyes are closed over a sliding window
+4. **Blink Frequency**: Number of blinks per second
+5. **Normal State Detection**: Frames where eyes are open and alert
+
+### Drowsiness Indicators
+
+- **High PERCLOS**: Eyes closed for more than 30% of time
+- **Low EAR**: Eye aspect ratio below threshold (0.25)
+- **Extended Eye Closure**: Eyes closed for more than 2 seconds
+- **Low Blink Frequency**: Less than 0.5 blinks per second
+
+## Compatibility
+
+The system maintains API compatibility with `simplify.py`:
+
+- Same endpoint structure and response format
+- Compatible database schema
+- Identical webhook payload format
+- Same queue management system
+
+## Database Schema
+
+The system uses the same SQLite schema as `simplify.py`:
+
+- `evidence_results`: Stores processing results
+- `processing_queue`: Manages video processing queue
+- `webhooks`: Stores webhook configurations
+
+## Performance Considerations
+
+- **Frame Skipping**: Processes every nth frame for better performance
+- **Concurrent Processing**: Configurable worker threads
+- **Memory Management**: Automatic cleanup of temporary files
+- **Error Handling**: Robust error handling for corrupted videos
+
+## Monitoring and Logging
+
+- Comprehensive logging to console and file
+- Processing time metrics
+- Queue statistics
+- Webhook delivery status
+- Error tracking and reporting
+
+## Comparison with YOLO-based System
+
+| Feature | YOLO System | Landmark System |
+|---------|-------------|-----------------|
+| Detection Method | Object detection | Facial landmarks |
+| Yawn Detection | ✅ | ❌ |
+| Eye Closure | ✅ | ✅ |
+| Head Pose | ✅ | ❌ |
+| PERCLOS | ❌ | ✅ |
+| Blink Analysis | Basic | Advanced |
+| Model Size | Large | Small |
+| Processing Speed | Moderate | Fast |
+| Accuracy | High | High |
+
+## Troubleshooting
+
+### Common Issues
+
+1. **dlib installation fails**:
+   - Ensure cmake and boost are installed
+   - Use pre-compiled wheels: `pip install dlib`
+
+2. **Facial landmark predictor not found**:
+   - The system will auto-download on first run
+   - Ensure internet connectivity
+
+3. **No face detected**:
+   - Check video quality and lighting
+   - Ensure face is clearly visible
+   - Verify video format compatibility
+
+4. **High memory usage**:
+   - Reduce `LANDMARK_MAX_WORKERS`
+   - Increase `LANDMARK_FRAME_SKIP`
+   - Monitor video resolution
+
+## Development
+
+### Adding New Features
+
+1. **New Detection Methods**: Extend `LandmarkDrowsinessProcessor`
+2. **Custom Analyzers**: Implement `LandmarkDrowsinessAnalyzer`
+3. **Additional Metrics**: Modify database schema and API responses
+4. **Enhanced Webhooks**: Extend `LandmarkWebhookManager`
+
+### Testing
+
+```bash
+# Test with a sample video
+curl -X POST http://localhost:8003/api/process \
+  -H "Content-Type: application/json" \
+  -d '{"video_url": "path/to/test/video.mp4"}'
+```
+
+## License
+
+This system is designed to integrate with the existing drowsiness detection infrastructure while providing landmark-based analysis capabilities.
