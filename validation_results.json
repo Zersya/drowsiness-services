@@ -1,0 +1,52 @@
+{
+  "timestamp": "2025-06-26 15:58:49",
+  "system_version": "enhanced_landmark_v2.0",
+  "summary": {
+    "total_tests": 3,
+    "fatigue_detected": 1,
+    "detection_rate": 33.33333333333333,
+    "average_confidence": 0.7999999999999999,
+    "average_fatigue_score": 14.0
+  },
+  "detailed_results": [
+    {
+      "video": "0b5e956bf4340d0269a1f3fe39d1f2cd.mp4",
+      "fatigue_percentage": 0.0,
+      "is_fatigue": false,
+      "confidence": 0.85,
+      "fatigue_level": "normal",
+      "detection_method": "enhanced_landmark_v3.0_with_yawning",
+      "calibration_status": "calibrated",
+      "perclos": 0.106,
+      "ear": 0.2752,
+      "blinks": 4,
+      "microsleeps": 0
+    },
+    {
+      "video": "867395076528682_ch2_20250626152033_20250626152043__.mp4",
+      "fatigue_percentage": 12.0,
+      "is_fatigue": false,
+      "confidence": 0.7,
+      "fatigue_level": "normal",
+      "detection_method": "enhanced_landmark_v3.0_with_yawning",
+      "calibration_status": "default_thresholds",
+      "perclos": 0.0,
+      "ear": 0.2328,
+      "blinks": 0,
+      "microsleeps": 0
+    },
+    {
+      "video": "5d89457c06e25893f9c75cdcb51cf06e.mp4",
+      "fatigue_percentage": 30,
+      "is_fatigue": true,
+      "confidence": 0.85,
+      "fatigue_level": "mild",
+      "detection_method": "enhanced_landmark_v3.0_with_yawning",
+      "calibration_status": "calibrated",
+      "perclos": 0.051,
+      "ear": 0.3058,
+      "blinks": 2,
+      "microsleeps": 0
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+    "driver_name": "test_result",
+    "percentage_fatigue": 0.0,
+    "is_fatigue": false,
+    "confidence": 0.85,
+    "analysis_details": {
+        "video_fps": 20.0,
+        "total_frames": 200,
+        "frames_with_face": 135,
+        "average_perclos": 0.106,
+        "average_ear": 0.2752,
+        "analysis_duration_seconds": 9.95,
+        "detected_blinks": 4,
+        "microsleep_events": 0,
+        "max_consecutive_closed_frames": 9,
+        "baseline_ear": 0.2641,
+        "ear_threshold_used": 0.2113,
+        "calibration_status": "calibrated",
+        "fatigue_level": "normal",
+        "fatigue_factors": {
+            "perclos_level": "normal",
+            "ear_level": "normal",
+            "blink_level": "normal",
+            "microsleep_events": 0
+        },
+        "detection_method": "enhanced_landmark_v2.0"
+    },
+    "analysis_timestamp": "2025-06-26 15:35:44"
+}

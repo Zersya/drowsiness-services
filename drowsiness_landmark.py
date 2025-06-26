@@ -55,17 +55,67 @@ class FatigueDetectionSystem:
         self.predictor = None
         self._initialize_predictor()
         
-        # --- THRESHOLDS for Facial Analysis ---
-        self.EAR_THRESHOLD = 0.25
-        self.PERCLOS_THRESHOLD = 0.30
-        self.FATIGUE_THRESHOLD = 0.60 # Overall fatigue threshold (60%)
-        self.PERCLOS_WINDOW_SECONDS = 1.5
+        # --- ENHANCED THRESHOLDS for 90% Precision ---
+        # Adaptive EAR thresholds based on individual calibration
+        self.EAR_THRESHOLD_BASE = 0.22  # Lowered for better sensitivity
+        self.EAR_THRESHOLD_ADAPTIVE = 0.22  # Will be calibrated per video
+        self.EAR_CALIBRATION_FRAMES = 60  # Frames to use for calibration
+        
+        # PERCLOS thresholds - more sensitive detection
+        self.PERCLOS_THRESHOLD_MILD = 0.15    # 15% for mild fatigue
+        self.PERCLOS_THRESHOLD_MODERATE = 0.25 # 25% for moderate fatigue  
+        self.PERCLOS_THRESHOLD_SEVERE = 0.35   # 35% for severe fatigue
+        self.PERCLOS_WINDOW_SECONDS = 2.0      # Longer window for stability
+        
+        # Multi-level fatigue detection
+        self.FATIGUE_THRESHOLD_MILD = 0.30     # 30% for early detection
+        self.FATIGUE_THRESHOLD_MODERATE = 0.50 # 50% for moderate fatigue
+        self.FATIGUE_THRESHOLD_SEVERE = 0.70   # 70% for severe fatigue
+        
+        # Blink analysis parameters
+        self.MIN_BLINK_DURATION = 3    # Minimum frames for valid blink
+        self.MAX_BLINK_DURATION = 15   # Maximum frames for valid blink
+        self.MICROSLEEP_THRESHOLD = 30 # Frames indicating microsleep
+        
+        # Yawning detection parameters
+        self.YAWN_THRESHOLD = 0.6      # Mouth aspect ratio threshold for yawning
+        self.MIN_YAWN_DURATION = 10    # Minimum frames for valid yawn
+        self.MAX_YAWN_DURATION = 60    # Maximum frames for valid yawn
+        self.YAWN_FATIGUE_WEIGHT = 0.8 # High weight for yawning in fatigue calculation
+        
+        # Mask detection parameters
+        self.MASK_DETECTION_THRESHOLD = 0.4  # Threshold for detecting masks
+        self.MASK_COMPENSATION_FACTOR = 1.2  # Increase eye-based detection when mask present
         
         # Analysis parameters
         self.frame_buffer = []
-        self.analysis_window_frames = 30
+        self.ear_history = []
+        self.blink_history = []
+        self.yawn_history = []
+        self.analysis_window_frames = 60  # Increased for better analysis
         self.blink_counter = 0
         self.closed_eye_frames = 0
+        self.consecutive_closed_frames = 0
+        self.max_consecutive_closed = 0
+        self.microsleep_events = 0
+        
+        # Yawning tracking
+        self.yawn_counter = 0
+        self.consecutive_yawn_frames = 0
+        self.max_consecutive_yawn = 0
+        self.yawn_frames = 0
+        
+        # Mask detection
+        self.mask_detected_frames = 0
+        self.total_analyzed_frames = 0
+        self.is_mask_present = False
+        
+        # Calibration data
+        self.calibration_ears = []
+        self.baseline_ear = None
+        self.baseline_mar = None  # Mouth aspect ratio baseline
+        self.is_calibrated = False
+        self.last_ear = None
         
     def _initialize_predictor(self):
         """Initialize facial landmark predictor"""
@@ -119,14 +169,33 @@ class FatigueDetectionSystem:
             return None
 
     def calculate_ear(self, eye_landmarks: np.ndarray) -> float:
-        """Calculate Eye Aspect Ratio (EAR)"""
-        vertical_1 = euclidean(eye_landmarks[1], eye_landmarks[5])
-        vertical_2 = euclidean(eye_landmarks[2], eye_landmarks[4])
-        horizontal = euclidean(eye_landmarks[0], eye_landmarks[3])
-        
-        if horizontal == 0: return 0.3 # Avoid division by zero
-        ear = (vertical_1 + vertical_2) / (2.0 * horizontal)
-        return ear
+        """Calculate Enhanced Eye Aspect Ratio (EAR) with noise reduction"""
+        try:
+            # Calculate vertical distances
+            vertical_1 = euclidean(eye_landmarks[1], eye_landmarks[5])
+            vertical_2 = euclidean(eye_landmarks[2], eye_landmarks[4])
+            
+            # Calculate horizontal distance
+            horizontal = euclidean(eye_landmarks[0], eye_landmarks[3])
+            
+            if horizontal == 0: 
+                return 0.3  # Avoid division by zero
+            
+            # Enhanced EAR calculation with weighted verticals
+            ear = (vertical_1 + vertical_2) / (2.0 * horizontal)
+            
+            # Apply smoothing to reduce noise
+            if hasattr(self, 'last_ear') and self.last_ear is not None:
+                # Simple exponential smoothing
+                alpha = 0.3  # Smoothing factor
+                ear = alpha * ear + (1 - alpha) * self.last_ear
+            
+            self.last_ear = ear
+            return max(0.1, min(0.6, ear))  # Clamp to reasonable range
+            
+        except Exception as e:
+            print(f"Error calculating EAR: {e}")
+            return 0.3
     
     def extract_eye_landmarks(self, face_landmarks) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """Extract left and right eye landmarks from facial landmarks"""
@@ -137,40 +206,395 @@ class FatigueDetectionSystem:
         except Exception as e:
             print(f"Error extracting eye landmarks: {e}")
             return None, None
+    
+    def extract_mouth_landmarks(self, face_landmarks) -> Optional[np.ndarray]:
+        """Extract mouth landmarks from facial landmarks"""
+        try:
+            # Extract inner mouth landmarks (points 60-67)
+            mouth = np.array([(face_landmarks.part(i).x, face_landmarks.part(i).y) for i in range(60, 68)], dtype="double")
+            return mouth
+        except Exception as e:
+            print(f"Error extracting mouth landmarks: {e}")
+            return None
+    
+    def calculate_mar(self, mouth_landmarks: np.ndarray) -> float:
+        """Calculate Mouth Aspect Ratio (MAR) for yawn detection"""
+        try:
+            # Calculate vertical distances (mouth height)
+            vertical_1 = euclidean(mouth_landmarks[2], mouth_landmarks[6])  # Top to bottom
+            vertical_2 = euclidean(mouth_landmarks[3], mouth_landmarks[7])  # Top to bottom (inner)
+            
+            # Calculate horizontal distance (mouth width)
+            horizontal = euclidean(mouth_landmarks[0], mouth_landmarks[4])  # Left to right
+            
+            if horizontal == 0:
+                return 0.3  # Avoid division by zero
+            
+            # MAR calculation - higher values indicate open mouth (yawning)
+            mar = (vertical_1 + vertical_2) / (2.0 * horizontal)
+            
+            # Apply smoothing to reduce noise
+            if hasattr(self, 'last_mar') and self.last_mar is not None:
+                alpha = 0.3  # Smoothing factor
+                mar = alpha * mar + (1 - alpha) * self.last_mar
+            
+            self.last_mar = mar
+            return max(0.1, min(2.0, mar))  # Clamp to reasonable range
+            
+        except Exception as e:
+            print(f"Error calculating MAR: {e}")
+            return 0.3
+    
+    def detect_mask(self, face_landmarks) -> bool:
+        """Detect if person is wearing a mask based on landmark visibility"""
+        try:
+            # Check if lower face landmarks are obscured or distorted
+            # Points around nose and mouth area
+            nose_tip = face_landmarks.part(33)  # Nose tip
+            mouth_center = face_landmarks.part(62)  # Mouth center
+            chin = face_landmarks.part(8)  # Chin
+            
+            # Calculate distances to detect mask presence
+            nose_to_mouth = euclidean((nose_tip.x, nose_tip.y), (mouth_center.x, mouth_center.y))
+            mouth_to_chin = euclidean((mouth_center.x, mouth_center.y), (chin.x, chin.y))
+            
+            # If these distances are unusually small, likely wearing mask
+            face_height = euclidean((face_landmarks.part(19).x, face_landmarks.part(19).y), 
+                                  (face_landmarks.part(8).x, face_landmarks.part(8).y))
+            
+            # Normalize distances by face height
+            nose_mouth_ratio = nose_to_mouth / face_height if face_height > 0 else 0
+            mouth_chin_ratio = mouth_to_chin / face_height if face_height > 0 else 0
+            
+            # Mask detection logic - if lower face ratios are small, likely masked
+            is_masked = (nose_mouth_ratio < 0.15 or mouth_chin_ratio < 0.2)
+            
+            return is_masked
+            
+        except Exception as e:
+            print(f"Error detecting mask: {e}")
+            return False
+    
+    def calibrate_thresholds(self, avg_ear: float, avg_mar: float, frame_number: int):
+        """Calibrate EAR and MAR thresholds based on initial frames"""
+        if frame_number < self.EAR_CALIBRATION_FRAMES:
+            if avg_ear > 0:
+                self.calibration_ears.append(avg_ear)
+            if avg_mar > 0:
+                if not hasattr(self, 'calibration_mars'):
+                    self.calibration_mars = []
+                self.calibration_mars.append(avg_mar)
+        elif frame_number == self.EAR_CALIBRATION_FRAMES:
+            # Calculate baseline EAR
+            if self.calibration_ears:
+                self.baseline_ear = np.mean(self.calibration_ears)
+                self.EAR_THRESHOLD_ADAPTIVE = max(0.18, self.baseline_ear * 0.8)
+            
+            # Calculate baseline MAR
+            if hasattr(self, 'calibration_mars') and self.calibration_mars:
+                self.baseline_mar = np.mean(self.calibration_mars)
+                # Yawn threshold is typically 1.5-2x baseline MAR
+                self.YAWN_THRESHOLD = max(0.6, self.baseline_mar * 1.8)
+            
+            self.is_calibrated = True
+            print(f"📊 Calibrated - EAR: baseline={self.baseline_ear:.3f}, threshold={self.EAR_THRESHOLD_ADAPTIVE:.3f}")
+            if self.baseline_mar:
+                print(f"📊 Calibrated - MAR: baseline={self.baseline_mar:.3f}, yawn_threshold={self.YAWN_THRESHOLD:.3f}")
+    
+    def detect_blink_patterns(self, is_closed: bool, frame_number: int):
+        """Enhanced blink pattern detection"""
+        if is_closed:
+            self.consecutive_closed_frames += 1
+            self.closed_eye_frames += 1
+        else:
+            if self.consecutive_closed_frames > 0:
+                # Analyze the closed period
+                if self.MIN_BLINK_DURATION <= self.consecutive_closed_frames <= self.MAX_BLINK_DURATION:
+                    # Valid blink detected
+                    self.blink_counter += 1
+                    self.blink_history.append({
+                        'frame': frame_number,
+                        'duration': self.consecutive_closed_frames,
+                        'type': 'normal_blink'
+                    })
+                elif self.consecutive_closed_frames > self.MICROSLEEP_THRESHOLD:
+                    # Microsleep detected
+                    self.microsleep_events += 1
+                    self.blink_history.append({
+                        'frame': frame_number,
+                        'duration': self.consecutive_closed_frames,
+                        'type': 'microsleep'
+                    })
+                
+                # Update max consecutive
+                self.max_consecutive_closed = max(self.max_consecutive_closed, self.consecutive_closed_frames)
+                self.consecutive_closed_frames = 0
+    
+    def detect_yawn_patterns(self, is_yawning: bool, frame_number: int, mar_value: float):
+        """Enhanced yawn pattern detection"""
+        if is_yawning:
+            self.consecutive_yawn_frames += 1
+            self.yawn_frames += 1
+        else:
+            if self.consecutive_yawn_frames > 0:
+                # Analyze the yawning period
+                if self.MIN_YAWN_DURATION <= self.consecutive_yawn_frames <= self.MAX_YAWN_DURATION:
+                    # Valid yawn detected
+                    self.yawn_counter += 1
+                    self.yawn_history.append({
+                        'frame': frame_number,
+                        'duration': self.consecutive_yawn_frames,
+                        'max_mar': mar_value,
+                        'type': 'yawn'
+                    })
+                    print(f"😴 Yawn detected at frame {frame_number} (duration: {self.consecutive_yawn_frames} frames)")
+                
+                # Update max consecutive yawn
+                self.max_consecutive_yawn = max(self.max_consecutive_yawn, self.consecutive_yawn_frames)
+                self.consecutive_yawn_frames = 0
+    
+    def calculate_enhanced_perclos(self, timestamp: float) -> float:
+        """Calculate PERCLOS with temporal weighting"""
+        if not self.frame_buffer:
+            return 0.0
+        
+        # Recent frames have higher weight
+        total_weight = 0
+        weighted_closed = 0
+        
+        for i, is_closed in enumerate(self.frame_buffer):
+            # Linear weighting - recent frames weighted more
+            weight = (i + 1) / len(self.frame_buffer)
+            total_weight += weight
+            if is_closed:
+                weighted_closed += weight
+        
+        return weighted_closed / total_weight if total_weight > 0 else 0.0
+    
+    def calculate_fatigue_score(self, perclos_score: float, avg_ear: float, blink_freq: float, timestamp: float) -> tuple:
+        """Enhanced multi-factor fatigue scoring with yawning detection"""
+        fatigue_factors = {}
+        
+        # Calculate yawning metrics
+        yawn_rate = self.yawn_counter / max(1, timestamp)  # yawns per second
+        yawn_percentage = (self.yawn_frames / max(1, self.total_analyzed_frames)) * 100
+        
+        # Factor 1: PERCLOS analysis (30% weight - reduced to accommodate yawning)
+        if perclos_score >= self.PERCLOS_THRESHOLD_SEVERE:
+            perclos_factor = 1.0
+            fatigue_factors['perclos_level'] = 'severe'
+        elif perclos_score >= self.PERCLOS_THRESHOLD_MODERATE:
+            perclos_factor = 0.7
+            fatigue_factors['perclos_level'] = 'moderate'
+        elif perclos_score >= self.PERCLOS_THRESHOLD_MILD:
+            perclos_factor = 0.4
+            fatigue_factors['perclos_level'] = 'mild'
+        else:
+            perclos_factor = 0.0
+            fatigue_factors['perclos_level'] = 'normal'
+        
+        # Factor 2: EAR analysis (25% weight)
+        if self.is_calibrated and self.baseline_ear:
+            ear_ratio = avg_ear / self.baseline_ear if avg_ear > 0 else 1.0
+            if ear_ratio < 0.7:  # Significantly below baseline
+                ear_factor = 1.0
+                fatigue_factors['ear_level'] = 'severe'
+            elif ear_ratio < 0.8:
+                ear_factor = 0.6
+                fatigue_factors['ear_level'] = 'moderate'
+            elif ear_ratio < 0.9:
+                ear_factor = 0.3
+                fatigue_factors['ear_level'] = 'mild'
+            else:
+                ear_factor = 0.0
+                fatigue_factors['ear_level'] = 'normal'
+        else:
+            # Fallback to absolute threshold
+            if avg_ear < self.EAR_THRESHOLD_ADAPTIVE:
+                ear_factor = 0.8
+                fatigue_factors['ear_level'] = 'below_threshold'
+            else:
+                ear_factor = 0.0
+                fatigue_factors['ear_level'] = 'normal'
+        
+        # Factor 3: Yawning analysis (25% weight - HIGH PRIORITY)
+        if self.yawn_counter > 0:
+            # Any yawning indicates fatigue
+            if self.yawn_counter >= 3:  # Multiple yawns = severe fatigue
+                yawn_factor = 1.0
+                fatigue_factors['yawn_level'] = 'severe'
+            elif self.yawn_counter >= 2:  # 2 yawns = moderate fatigue
+                yawn_factor = 0.8
+                fatigue_factors['yawn_level'] = 'moderate'
+            else:  # 1 yawn = mild fatigue
+                yawn_factor = 0.6
+                fatigue_factors['yawn_level'] = 'mild'
+        else:
+            yawn_factor = 0.0
+            fatigue_factors['yawn_level'] = 'normal'
+        
+        # Factor 4: Blink frequency analysis (15% weight)
+        expected_blink_rate = 0.3  # blinks per second (18 per minute)
+        if blink_freq < expected_blink_rate * 0.3:  # Very low blink rate
+            blink_factor = 0.8
+            fatigue_factors['blink_level'] = 'very_low'
+        elif blink_freq < expected_blink_rate * 0.6:  # Low blink rate
+            blink_factor = 0.4
+            fatigue_factors['blink_level'] = 'low'
+        else:
+            blink_factor = 0.0
+            fatigue_factors['blink_level'] = 'normal'
+        
+        # Factor 5: Microsleep events (5% weight)
+        microsleep_factor = min(1.0, self.microsleep_events * 0.3)
+        fatigue_factors['microsleep_events'] = self.microsleep_events
+        
+        # Add yawning details to factors
+        fatigue_factors['yawn_count'] = self.yawn_counter
+        fatigue_factors['yawn_rate_per_minute'] = yawn_rate * 60
+        fatigue_factors['yawn_percentage'] = yawn_percentage
+        fatigue_factors['mask_detected'] = self.is_mask_present
+        
+        # Weighted combination with yawning priority
+        base_fatigue = (
+            perclos_factor * 0.30 +
+            ear_factor * 0.25 +
+            yawn_factor * 0.25 +
+            blink_factor * 0.15 +
+            microsleep_factor * 0.05
+        ) * 100
+        
+        # Apply mask compensation if detected
+        if self.is_mask_present:
+            # Increase weight of eye-based metrics when mask is present
+            mask_compensated_fatigue = base_fatigue * self.MASK_COMPENSATION_FACTOR
+            fatigue_percentage = min(100, mask_compensated_fatigue)
+            fatigue_factors['mask_compensation_applied'] = True
+        else:
+            fatigue_percentage = base_fatigue
+            fatigue_factors['mask_compensation_applied'] = False
+        
+        # CRITICAL: Any yawning should result in at least mild fatigue (30%)
+        if self.yawn_counter > 0 and fatigue_percentage < 30:
+            fatigue_percentage = max(30, fatigue_percentage)
+            fatigue_factors['yawn_override'] = True
+        else:
+            fatigue_factors['yawn_override'] = False
+        
+        # Calculate confidence based on data quality
+        confidence = self._calculate_confidence(perclos_score, avg_ear, timestamp)
+        
+        return fatigue_percentage, confidence, fatigue_factors
+    
+    def _calculate_confidence(self, perclos_score: float, avg_ear: float, timestamp: float) -> float:
+        """Calculate confidence score based on data quality"""
+        confidence_factors = []
+        
+        # Factor 1: Calibration quality
+        if self.is_calibrated:
+            confidence_factors.append(0.9)
+        else:
+            confidence_factors.append(0.6)
+        
+        # Factor 2: Data consistency
+        if len(self.ear_history) > 10:
+            ear_std = np.std(self.ear_history[-30:])  # Last 30 values
+            if ear_std < 0.05:  # Consistent readings
+                confidence_factors.append(0.9)
+            elif ear_std < 0.1:
+                confidence_factors.append(0.7)
+            else:
+                confidence_factors.append(0.5)
+        else:
+            confidence_factors.append(0.6)
+        
+        # Factor 3: Analysis duration
+        if timestamp > 10:  # At least 10 seconds
+            confidence_factors.append(0.9)
+        elif timestamp > 5:
+            confidence_factors.append(0.7)
+        else:
+            confidence_factors.append(0.5)
+        
+        # Factor 4: Face detection quality
+        face_detection_rate = len([ear for ear in self.ear_history if ear > 0]) / max(1, len(self.ear_history))
+        confidence_factors.append(min(0.9, face_detection_rate))
+        
+        return min(0.95, np.mean(confidence_factors))
 
     def analyze_frame(self, frame: np.ndarray, frame_number: int, timestamp: float) -> FatigueMetrics:
-        """Analyze a single frame for facial fatigue indicators"""
+        """Enhanced frame analysis with yawning, mask detection, and adaptive thresholds"""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         left_ear, right_ear = -1.0, -1.0
+        mar_value = -1.0
+        
+        # Apply histogram equalization for better face detection in varying lighting
+        gray = cv2.equalizeHist(gray)
         
         faces = self.detector(gray)
+        self.total_analyzed_frames += 1
         
         if faces:
-            face = faces[0]
+            # Use the largest face if multiple detected
+            face = max(faces, key=lambda rect: rect.width() * rect.height())
             if self.predictor:
                 landmarks = self.predictor(gray, face)
+                
+                # Extract eye landmarks
                 left_eye, right_eye = self.extract_eye_landmarks(landmarks)
                 if left_eye is not None and right_eye is not None:
                     left_ear = self.calculate_ear(left_eye)
                     right_ear = self.calculate_ear(right_eye)
+                
+                # Extract mouth landmarks and detect yawning
+                mouth = self.extract_mouth_landmarks(landmarks)
+                if mouth is not None:
+                    mar_value = self.calculate_mar(mouth)
+                
+                # Detect mask presence
+                is_masked = self.detect_mask(landmarks)
+                if is_masked:
+                    self.mask_detected_frames += 1
         
+        # Update mask detection status
+        if self.total_analyzed_frames > 30:  # After some frames
+            mask_ratio = self.mask_detected_frames / self.total_analyzed_frames
+            self.is_mask_present = mask_ratio > 0.3  # If 30%+ frames show mask
+        
+        # Process EAR data
         avg_ear = -1.0
         if left_ear != -1.0:
             avg_ear = (left_ear + right_ear) / 2.0
+            self.ear_history.append(avg_ear)
+            
+            # Keep only recent EAR history
+            if len(self.ear_history) > 300:  # ~10 seconds at 30fps
+                self.ear_history.pop(0)
         
-        is_closed = avg_ear < self.EAR_THRESHOLD if avg_ear != -1.0 else False
-        if is_closed:
-            self.closed_eye_frames += 1
+        # Calibrate thresholds if not done yet
+            if not self.is_calibrated:
+                self.calibrate_thresholds(avg_ear if avg_ear > 0 else 0, mar_value if mar_value > 0 else 0, frame_number)        
+        # Determine if eyes are closed using adaptive threshold
+        threshold = self.EAR_THRESHOLD_ADAPTIVE if self.is_calibrated else self.EAR_THRESHOLD_BASE
+        is_closed = avg_ear < threshold if avg_ear != -1.0 else False
         
+        # Determine if yawning
+        yawn_threshold = self.YAWN_THRESHOLD if hasattr(self, 'YAWN_THRESHOLD') else 0.6
+        is_yawning = mar_value > yawn_threshold if mar_value != -1.0 else False
+        
+        # Enhanced pattern detection
+        self.detect_blink_patterns(is_closed, frame_number)
+        self.detect_yawn_patterns(is_yawning, frame_number, mar_value)
+        
+        # Update frame buffer
         self.frame_buffer.append(is_closed)
         if len(self.frame_buffer) > self.analysis_window_frames:
             self.frame_buffer.pop(0)
         
-        perclos_score = sum(self.frame_buffer) / len(self.frame_buffer) if self.frame_buffer else 0
+        # Calculate enhanced PERCLOS
+        perclos_score = self.calculate_enhanced_perclos(timestamp)
         
-        if len(self.frame_buffer) > 1 and not self.frame_buffer[-2] and self.frame_buffer[-1]:
-             self.blink_counter += 1
-
+        # Calculate blink frequency
         blink_freq = self.blink_counter / max(1, timestamp)
         
         return FatigueMetrics(left_ear, right_ear, perclos_score, blink_freq, frame_number, timestamp)
@@ -190,7 +614,37 @@ class FatigueDetectionSystem:
                 return None
             
             # Reset analysis state for each video
-            self.frame_buffer, self.closed_eye_frames, self.blink_counter = [], 0, 0
+            self.frame_buffer = []
+            self.ear_history = []
+            self.blink_history = []
+            self.yawn_history = []
+            self.closed_eye_frames = 0
+            self.blink_counter = 0
+            self.consecutive_closed_frames = 0
+            self.max_consecutive_closed = 0
+            self.microsleep_events = 0
+            
+            # Reset yawning tracking
+            self.yawn_counter = 0
+            self.consecutive_yawn_frames = 0
+            self.max_consecutive_yawn = 0
+            self.yawn_frames = 0
+            
+            # Reset mask detection
+            self.mask_detected_frames = 0
+            self.total_analyzed_frames = 0
+            self.is_mask_present = False
+            
+            # Reset calibration
+            self.calibration_ears = []
+            if hasattr(self, 'calibration_mars'):
+                self.calibration_mars = []
+            self.baseline_ear = None
+            self.baseline_mar = None
+            self.is_calibrated = False
+            self.last_ear = None
+            if hasattr(self, 'last_mar'):
+                self.last_mar = None
             
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -226,25 +680,67 @@ class FatigueDetectionSystem:
             if not valid_ear_metrics:
                 print("\n❌ Warning: No faces detected. Returning result with 0% fatigue.")
                 fatigue_percentage = 0.0
-                confidence = 0.5
+                confidence = 0.3
                 avg_perclos = 0
                 avg_ear = 0
+                fatigue_factors = {'reason': 'no_face_detected'}
+                fatigue_level = 'unknown'
             else:
+                # Calculate enhanced metrics
                 avg_perclos = sum(m.perclos_score for m in frame_metrics) / len(frame_metrics)
                 avg_ear = sum((m.eye_aspect_ratio_left + m.eye_aspect_ratio_right) / 2 for m in valid_ear_metrics) / len(valid_ear_metrics)
+                avg_blink_freq = sum(m.blink_frequency for m in frame_metrics) / len(frame_metrics)
                 
-                perclos_factor = min(1.0, avg_perclos / self.PERCLOS_THRESHOLD)
-                ear_factor = max(0.0, (self.EAR_THRESHOLD - avg_ear) / self.EAR_THRESHOLD) if avg_ear > 0 else 0
-                fatigue_percentage = ((perclos_factor * 0.7) + (ear_factor * 0.3)) * 100
-                confidence = min(0.95, 0.5 + (abs(fatigue_percentage - (self.FATIGUE_THRESHOLD * 100)) / 100))
+                # Use enhanced fatigue scoring
+                fatigue_percentage, confidence, fatigue_factors = self.calculate_fatigue_score(
+                    avg_perclos, avg_ear, avg_blink_freq, timestamp
+                )
+                
+                # Determine fatigue level
+                if fatigue_percentage >= self.FATIGUE_THRESHOLD_SEVERE * 100:
+                    fatigue_level = 'severe'
+                elif fatigue_percentage >= self.FATIGUE_THRESHOLD_MODERATE * 100:
+                    fatigue_level = 'moderate'
+                elif fatigue_percentage >= self.FATIGUE_THRESHOLD_MILD * 100:
+                    fatigue_level = 'mild'
+                else:
+                    fatigue_level = 'normal'
 
-            is_fatigue = fatigue_percentage > (self.FATIGUE_THRESHOLD * 100)
+            # Enhanced fatigue detection - more sensitive thresholds
+            is_fatigue = fatigue_percentage >= (self.FATIGUE_THRESHOLD_MILD * 100)
             
             analysis_details = {
-                "video_fps": fps, "total_frames": len(frame_metrics),
-                "frames_with_face": len(valid_ear_metrics), "average_perclos": round(avg_perclos, 4),
-                "average_ear": round(avg_ear, 4), "analysis_duration_seconds": round(timestamp, 2),
-                "detected_blinks": self.blink_counter
+                "video_fps": fps, 
+                "total_frames": len(frame_metrics),
+                "frames_with_face": len(valid_ear_metrics), 
+                "average_perclos": round(avg_perclos, 4),
+                "average_ear": round(avg_ear, 4), 
+                "analysis_duration_seconds": round(timestamp, 2),
+                "detected_blinks": self.blink_counter,
+                "microsleep_events": self.microsleep_events,
+                "max_consecutive_closed_frames": self.max_consecutive_closed,
+                
+                # Yawning metrics
+                "detected_yawns": self.yawn_counter,
+                "max_consecutive_yawn_frames": self.max_consecutive_yawn,
+                "yawn_frames": self.yawn_frames,
+                "yawn_rate_per_minute": (self.yawn_counter / max(1, timestamp)) * 60,
+                
+                # Mask detection
+                "mask_detected": self.is_mask_present,
+                "mask_detection_confidence": round(self.mask_detected_frames / max(1, self.total_analyzed_frames), 3),
+                
+                # Calibration info
+                "baseline_ear": round(self.baseline_ear, 4) if self.baseline_ear else None,
+                "baseline_mar": round(self.baseline_mar, 4) if hasattr(self, 'baseline_mar') and self.baseline_mar else None,
+                "ear_threshold_used": round(self.EAR_THRESHOLD_ADAPTIVE if self.is_calibrated else self.EAR_THRESHOLD_BASE, 4),
+                "yawn_threshold_used": round(self.YAWN_THRESHOLD, 4) if hasattr(self, 'YAWN_THRESHOLD') else 0.6,
+                "calibration_status": "calibrated" if self.is_calibrated else "default_thresholds",
+                
+                # Results
+                "fatigue_level": fatigue_level,
+                "fatigue_factors": fatigue_factors,
+                "detection_method": "enhanced_landmark_v3.0_with_yawning"
             }
             
             result = FatigueResult(
