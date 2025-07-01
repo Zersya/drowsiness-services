@@ -384,10 +384,10 @@ class FatigueDetectionSystem:
             perclos_factor = 1.0
             fatigue_factors['perclos_level'] = 'severe'
         elif perclos_score >= self.PERCLOS_THRESHOLD_MODERATE:
-            perclos_factor = 0.7
+            perclos_factor = 0.75
             fatigue_factors['perclos_level'] = 'moderate'
         elif perclos_score >= self.PERCLOS_THRESHOLD_MILD:
-            perclos_factor = 0.4
+            perclos_factor = 0.5
             fatigue_factors['perclos_level'] = 'mild'
         else:
             perclos_factor = 0.0
@@ -400,10 +400,10 @@ class FatigueDetectionSystem:
                 ear_factor = 1.0
                 fatigue_factors['ear_level'] = 'severe'
             elif ear_ratio < 0.8:
-                ear_factor = 0.6
+                ear_factor = 0.7
                 fatigue_factors['ear_level'] = 'moderate'
             elif ear_ratio < 0.9:
-                ear_factor = 0.3
+                ear_factor = 0.4
                 fatigue_factors['ear_level'] = 'mild'
             else:
                 ear_factor = 0.0
@@ -424,10 +424,10 @@ class FatigueDetectionSystem:
                 yawn_factor = 1.0
                 fatigue_factors['yawn_level'] = 'severe'
             elif self.yawn_counter >= 2:  # 2 yawns = moderate fatigue
-                yawn_factor = 0.8
+                yawn_factor = 0.85
                 fatigue_factors['yawn_level'] = 'moderate'
             else:  # 1 yawn = mild fatigue
-                yawn_factor = 0.6
+                yawn_factor = 0.7
                 fatigue_factors['yawn_level'] = 'mild'
         else:
             yawn_factor = 0.0
@@ -439,7 +439,7 @@ class FatigueDetectionSystem:
             blink_factor = 0.8
             fatigue_factors['blink_level'] = 'very_low'
         elif blink_freq < expected_blink_rate * 0.6:  # Low blink rate
-            blink_factor = 0.4
+            blink_factor = 0.5
             fatigue_factors['blink_level'] = 'low'
         else:
             blink_factor = 0.0
