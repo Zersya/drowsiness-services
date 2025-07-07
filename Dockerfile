@@ -2,7 +2,7 @@
 ARG BUILD_TYPE=gpu
 
 # Stage 1: CUDA base image for GPU support
-FROM nvidia/cuda:12.4-devel-ubuntu22.04 AS gpu-base
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS gpu-base
 
 # Install Python 3.11 and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
