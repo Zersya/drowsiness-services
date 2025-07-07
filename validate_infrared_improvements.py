@@ -91,6 +91,29 @@ class InfraredValidationSystem:
         self.detector = InfraredOptimizedDetector(precision_mode=precision_mode)
         self.db_manager = LandmarkDatabaseManager()
         self.results = []
+
+    def validate_with_thresholds(self, fatigue_threshold: float, perclos_threshold: float, confidence_threshold: float):
+        """Validate system with custom thresholds"""
+        # Temporarily update detector thresholds using correct attribute names
+        original_fatigue = self.detector.FATIGUE_THRESHOLD_MILD
+        original_perclos = self.detector.PERCLOS_THRESHOLD_MILD
+        original_confidence = self.detector.MIN_CONFIDENCE_THRESHOLD
+
+        try:
+            # Set new thresholds using correct attribute names
+            self.detector.FATIGUE_THRESHOLD_MILD = fatigue_threshold
+            self.detector.PERCLOS_THRESHOLD_MILD = perclos_threshold
+            self.detector.MIN_CONFIDENCE_THRESHOLD = confidence_threshold
+
+            # Run validation
+            results = self.test_enhanced_system()
+            return results
+
+        finally:
+            # Restore original thresholds
+            self.detector.FATIGUE_THRESHOLD_MILD = original_fatigue
+            self.detector.PERCLOS_THRESHOLD_MILD = original_perclos
+            self.detector.MIN_CONFIDENCE_THRESHOLD = original_confidence
     
     def test_enhanced_system(self):
         """Test the enhanced infrared fatigue detection system with actual video analysis."""

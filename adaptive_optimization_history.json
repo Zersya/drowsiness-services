@@ -1,0 +1,96 @@
+{
+  "optimization_config": {
+    "target_precision": 0.9,
+    "max_iterations": 30,
+    "param_bounds": {
+      "fatigue_threshold": [
+        0.15,
+        0.8
+      ],
+      "perclos_threshold": [
+        0.05,
+        0.4
+      ],
+      "confidence_threshold": [
+        0.5,
+        0.95
+      ]
+    }
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "precision": 0.375,
+      "recall": 0.25,
+      "f1_score": 0.3,
+      "accuracy": 0.5,
+      "thresholds": {
+        "fatigue_threshold": 0.35,
+        "perclos_threshold": 0.15,
+        "confidence_threshold": 0.7
+      },
+      "confusion_matrix": {
+        "TP": 3,
+        "FP": 5,
+        "TN": 11,
+        "FN": 9
+      },
+      "timestamp": "2025-07-07 13:27:46",
+      "improvement_score": 0.31666666666666665,
+      "exploration_type": "initial"
+    },
+    {
+      "iteration": 2,
+      "precision": 0.4444444444444444,
+      "recall": 1.0,
+      "f1_score": 0.6153846153846153,
+      "accuracy": 0.4642857142857143,
+      "thresholds": {
+        "fatigue_threshold": 0.15692886978271603,
+        "perclos_threshold": 0.06709189985929942,
+        "confidence_threshold": 0.5
+      },
+      "confusion_matrix": {
+        "TP": 12,
+        "FP": 15,
+        "TN": 1,
+        "FN": 0
+      },
+      "timestamp": "2025-07-07 13:30:54",
+      "improvement_score": 0.49382716049382713,
+      "exploration_type": "exploitation"
+    },
+    {
+      "iteration": 3,
+      "precision": 0.4230769230769231,
+      "recall": 0.9166666666666666,
+      "f1_score": 0.5789473684210527,
+      "accuracy": 0.42857142857142855,
+      "thresholds": {
+        "fatigue_threshold": 0.19804750605927773,
+        "perclos_threshold": 0.07239814319754437,
+        "confidence_threshold": 0.5
+      },
+      "confusion_matrix": {
+        "TP": 11,
+        "FP": 15,
+        "TN": 1,
+        "FN": 1
+      },
+      "timestamp": "2025-07-07 13:34:01",
+      "improvement_score": 0.4700854700854701,
+      "exploration_type": "exploitation"
+    }
+  ],
+  "best_iteration": {
+    "iteration": 2,
+    "precision": 0.4444444444444444,
+    "recall": 1.0,
+    "thresholds": {
+      "fatigue_threshold": 0.15692886978271603,
+      "perclos_threshold": 0.06709189985929942,
+      "confidence_threshold": 0.5
+    },
+    "improvement_score": 0.49382716049382713
+  }
+}
