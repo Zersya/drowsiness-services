@@ -1,5 +1,6 @@
 # Multi-stage build for GPU-accelerated landmark detection
 ARG BUILD_TYPE=gpu
+ARG DEBIAN_FRONTEND=noninteractive
 
 # Stage 1: CUDA base image for GPU support
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS gpu-base
@@ -37,7 +38,6 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 # Stage 2: CPU-only fallback image
 FROM python:3.11-slim AS cpu-base
 
-ENV DEBIAN_FRONTEND=noninteractive
 
 
 # Install system dependencies for landmark detection (CPU-only)
