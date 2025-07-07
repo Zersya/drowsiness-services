@@ -10,7 +10,6 @@ requests>=2.31.0
 # Computer vision and machine learning
 opencv-python>=4.8.0
 numpy>=1.24.0
-dlib>=19.24.0
 scipy>=1.11.0
 
 # GPU acceleration dependencies (optional - will fallback to CPU if not available)
