@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: landmark-drowsiness-detector
-    container_name: landmark-drowsiness-detector
+    container_name: simplify-drowsiness-detector
     restart: unless-stopped
     labels:
       - "com.mdvr.service=landmark-drowsiness-detector"
@@ -14,11 +14,11 @@ services:
       - landmark_db_data:/app/data
       - ./data:/app/data_host
     ports:
-      - 8003:8003
+      - 8002:8002
     networks:
       - proxy
     environment:
-      - LANDMARK_PORT=8003
+      - LANDMARK_PORT=8002
       - LANDMARK_HOST=0.0.0.0
       - LANDMARK_MAX_WORKERS=1
       - LANDMARK_QUEUE_CHECK_INTERVAL=5
