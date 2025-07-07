@@ -37,6 +37,9 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 # Stage 2: CPU-only fallback image
 FROM python:3.11-slim AS cpu-base
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+
 # Install system dependencies for landmark detection (CPU-only)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
@@ -53,6 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libopenblas-dev \
     liblapack-dev \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Stage 3: Final image (defaults to GPU, can be overridden)
