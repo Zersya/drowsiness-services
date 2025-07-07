@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libopenblas-dev \
     liblapack-dev \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Python 3.11 as default
@@ -92,11 +93,11 @@ RUN if [ ! -f shape_predictor_68_face_landmarks.dat ]; then \
     fi
 
 # Landmark API configuration
-ENV LANDMARK_PORT=${LANDMARK_PORT:-8003}
+ENV LANDMARK_PORT=${LANDMARK_PORT:-8002}
 ENV LANDMARK_HOST=0.0.0.0
 
 # Landmark system specific settings
-ENV LANDMARK_MAX_WORKERS=${LANDMARK_MAX_WORKERS:-1}
+ENV LANDMARK_MAX_WORKERS=${LANDMARK_MAX_WORKERS:-35}
 ENV LANDMARK_QUEUE_CHECK_INTERVAL=${LANDMARK_QUEUE_CHECK_INTERVAL:-5}
 ENV LANDMARK_DB_PATH=${LANDMARK_DB_PATH:-/app/data/landmark_detection.db}
 
