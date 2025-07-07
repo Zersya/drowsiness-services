@@ -4,13 +4,13 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        BUILD_TYPE: gpu  # Change to 'cpu' for CPU-only build
-    image: landmark-drowsiness-detector-gpu
+        BUILD_TYPE: cpu  # CPU-only build
+    image: landmark-drowsiness-detector-cpu
     container_name: landmark-drowsiness-detector
     restart: unless-stopped
     labels:
       - "com.mdvr.service=landmark-drowsiness-detector"
-      - "com.mdvr.version=2.0-gpu"
+      - "com.mdvr.version=2.0-cpu"
     volumes:
       - ./logs:/app/logs
       - landmark_db_data:/app/data
@@ -30,19 +30,13 @@ services:
       - LANDMARK_PERCLOS_THRESHOLD=0.30
       - LANDMARK_FATIGUE_THRESHOLD=0.60
       - LANDMARK_PERCLOS_WINDOW_SECONDS=1.5
-      # GPU acceleration settings
-      - CUDA_VISIBLE_DEVICES=0
-      - DISABLE_GPU=false
-      - CUDA_DEVICE_ID=0
+      # Force CPU-only mode
+      - DISABLE_GPU=true
     deploy:
       resources:
         reservations:
           cpus: '2'
           memory: 4G
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     init: true
     stop_signal: SIGINT
     stop_grace_period: 30s

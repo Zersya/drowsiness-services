@@ -1,8 +1,40 @@
-FROM python:3.11-slim
+# Multi-stage build for GPU-accelerated landmark detection
+# Stage 1: CUDA base image for GPU support
+FROM nvidia/cuda:12.4-devel-ubuntu22.04 as gpu-base
 
-# Using Python 3.11 for better package compatibility with landmark detection libraries
+# Install Python 3.11 and system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-dev \
+    python3.11-distutils \
+    python3-pip \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    ffmpeg \
+    wget \
+    curl \
+    cmake \
+    libboost-all-dev \
+    build-essential \
+    pkg-config \
+    libopenblas-dev \
+    liblapack-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install system dependencies for landmark detection
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Stage 2: CPU-only fallback image
+FROM python:3.11-slim as cpu-base
+
+# Install system dependencies for landmark detection (CPU-only)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -20,6 +52,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     liblapack-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Stage 3: Final image (defaults to GPU, can be overridden)
+ARG BUILD_TYPE=gpu
+FROM ${BUILD_TYPE}-base as final
+
 # Set working directory
 WORKDIR /app
 
@@ -30,7 +66,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir opencv-python-headless
 
 # Install Python dependencies for landmark system
-RUN pip install --no-cache-dir -r requirements.txt
+# Try GPU-enabled packages first, fallback to CPU-only if GPU not available
+RUN pip install --no-cache-dir -r requirements.txt || \
+    (echo "GPU packages failed, installing CPU-only versions..." && \
+     pip install --no-cache-dir flask>=2.3.0 flask-cors>=4.0.0 python-dotenv>=1.0.0 requests>=2.31.0 opencv-python>=4.8.0 numpy>=1.24.0 dlib>=19.24.0 scipy>=1.11.0)
 
 # Verify dlib installation
 RUN python -c "import dlib; print('dlib version:', dlib.__version__)"
@@ -63,6 +102,11 @@ ENV LANDMARK_EAR_THRESHOLD=${LANDMARK_EAR_THRESHOLD:-0.25}
 ENV LANDMARK_PERCLOS_THRESHOLD=${LANDMARK_PERCLOS_THRESHOLD:-0.30}
 ENV LANDMARK_FATIGUE_THRESHOLD=${LANDMARK_FATIGUE_THRESHOLD:-0.60}
 ENV LANDMARK_PERCLOS_WINDOW_SECONDS=${LANDMARK_PERCLOS_WINDOW_SECONDS:-1.5}
+
+# GPU acceleration settings
+ENV CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+ENV DISABLE_GPU=${DISABLE_GPU:-false}
+ENV CUDA_DEVICE_ID=${CUDA_DEVICE_ID:-0}
 
 # Ensure proper signal handling in Docker
 ENV PYTHONDONTWRITEBYTECODE=1

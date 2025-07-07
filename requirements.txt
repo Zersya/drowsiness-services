@@ -1,5 +1,5 @@
-# Landmark-based Drowsiness Detection System Requirements
-# =====================================================
+# Landmark-based Drowsiness Detection System Requirements with GPU Acceleration
+# =============================================================================
 
 # Core dependencies
 flask>=2.3.0
@@ -13,5 +13,21 @@ numpy>=1.24.0
 dlib>=19.24.0
 scipy>=1.11.0
 
-# Note: All other dependencies (sqlite3, concurrent.futures, threading, etc.)
-# are built-in Python modules and don't need to be installed via pip
+# GPU acceleration dependencies (optional - will fallback to CPU if not available)
+# CuPy for GPU-accelerated NumPy operations (CUDA 12.x compatible)
+cupy-cuda12x>=12.0.0; platform_machine=="x86_64"
+
+# Alternative requirements for different CUDA versions (uncomment as needed):
+# cupy-cuda11x>=11.0.0; platform_machine=="x86_64"  # For CUDA 11.x
+# cupy-cuda10x>=10.0.0; platform_machine=="x86_64"  # For CUDA 10.x
+
+# Note:
+# - OpenCV with CUDA support requires opencv-contrib-python compiled with CUDA
+# - For production deployment, consider using opencv-contrib-python-headless
+# - CuPy installation requires compatible CUDA toolkit (12.x for cupy-cuda12x)
+# - All other dependencies (sqlite3, concurrent.futures, threading, etc.)
+#   are built-in Python modules and don't need to be installed via pip
+
+# Development and testing dependencies (optional)
+# pytest>=7.0.0
+# pytest-cov>=4.0.0

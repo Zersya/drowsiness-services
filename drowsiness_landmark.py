@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-Fatigue Detection System
-========================
+Fatigue Detection System with CUDA GPU Acceleration
+==================================================
 
 A system for detecting driver fatigue by analyzing facial features
 from a single front-facing video. It analyzes eye closure patterns (PERCLOS)
 to determine fatigue levels.
 
+Enhanced with CUDA GPU acceleration for improved performance while maintaining
+backward compatibility with CPU-only environments.
+
 Author: Fellou AI Agent
 Date: December 6, 2025 (Updated: June 12, 2025)
+CUDA Enhancement: July 7, 2025
 """
 
 import cv2
@@ -20,9 +24,235 @@ import argparse
 import time
 import requests
 import tempfile
+import logging
 from typing import Dict, Tuple, Optional
 from dataclasses import dataclass, asdict
 from scipy.spatial.distance import euclidean
+
+# CUDA and GPU acceleration imports
+try:
+    import cupy as cp
+    CUPY_AVAILABLE = True
+except ImportError:
+    CUPY_AVAILABLE = False
+    cp = None
+
+try:
+    # Check if OpenCV was compiled with CUDA support
+    OPENCV_CUDA_AVAILABLE = cv2.cuda.getCudaEnabledDeviceCount() > 0
+except (AttributeError, cv2.error):
+    OPENCV_CUDA_AVAILABLE = False
+
+class CUDAManager:
+    """
+    Manages CUDA GPU acceleration for the drowsiness detection system.
+    Provides automatic fallback to CPU processing when GPU is not available.
+    """
+
+    def __init__(self, enable_gpu: bool = True, device_id: int = 0):
+        """
+        Initialize CUDA manager with GPU acceleration settings.
+
+        Args:
+            enable_gpu: Whether to attempt GPU acceleration
+            device_id: CUDA device ID to use (default: 0)
+        """
+        self.enable_gpu = enable_gpu
+        self.device_id = device_id
+        self.gpu_available = False
+        self.cupy_available = CUPY_AVAILABLE
+        self.opencv_cuda_available = OPENCV_CUDA_AVAILABLE
+
+        # Performance tracking
+        self.gpu_processing_times = []
+        self.cpu_processing_times = []
+
+        if self.enable_gpu:
+            self._initialize_gpu()
+
+        # Log GPU status
+        self._log_gpu_status()
+
+    def _initialize_gpu(self):
+        """Initialize GPU acceleration if available."""
+        try:
+            if self.cupy_available:
+                # Set CUDA device
+                cp.cuda.Device(self.device_id).use()
+                # Test GPU availability with a simple operation
+                test_array = cp.array([1, 2, 3])
+                _ = cp.sum(test_array)
+                self.gpu_available = True
+                logging.info(f"✅ CUDA GPU acceleration initialized on device {self.device_id}")
+            else:
+                logging.warning("⚠️ CuPy not available, GPU acceleration disabled")
+        except Exception as e:
+            logging.warning(f"⚠️ Failed to initialize GPU acceleration: {e}")
+            self.gpu_available = False
+
+    def _log_gpu_status(self):
+        """Log the current GPU acceleration status."""
+        status_lines = [
+            "🔧 GPU Acceleration Status:",
+            f"  • GPU Enabled: {'✅' if self.enable_gpu else '❌'}",
+            f"  • CuPy Available: {'✅' if self.cupy_available else '❌'}",
+            f"  • OpenCV CUDA Available: {'✅' if self.opencv_cuda_available else '❌'}",
+            f"  • GPU Ready: {'✅' if self.gpu_available else '❌'}"
+        ]
+
+        if self.gpu_available:
+            try:
+                device_name = cp.cuda.Device(self.device_id).attributes['name']
+                memory_info = cp.cuda.MemoryInfo()
+                status_lines.extend([
+                    f"  • Device: {device_name}",
+                    f"  • Memory: {memory_info.total // (1024**3)} GB total"
+                ])
+            except:
+                pass
+
+        for line in status_lines:
+            print(line)
+
+    def is_gpu_available(self) -> bool:
+        """Check if GPU acceleration is available and enabled."""
+        return self.enable_gpu and self.gpu_available
+
+    def to_gpu(self, array: np.ndarray) -> 'cp.ndarray':
+        """
+        Transfer numpy array to GPU memory.
+
+        Args:
+            array: NumPy array to transfer
+
+        Returns:
+            CuPy array on GPU or original array if GPU not available
+        """
+        if self.is_gpu_available():
+            try:
+                return cp.asarray(array)
+            except Exception as e:
+                logging.warning(f"Failed to transfer array to GPU: {e}")
+        return array
+
+    def to_cpu(self, array) -> np.ndarray:
+        """
+        Transfer array from GPU to CPU memory.
+
+        Args:
+            array: Array to transfer (CuPy or NumPy)
+
+        Returns:
+            NumPy array on CPU
+        """
+        if self.is_gpu_available() and hasattr(array, 'get'):
+            try:
+                return array.get()
+            except Exception as e:
+                logging.warning(f"Failed to transfer array to CPU: {e}")
+        return np.asarray(array)
+
+    def get_performance_stats(self) -> Dict:
+        """Get performance statistics for GPU vs CPU processing."""
+        stats = {
+            'gpu_available': self.gpu_available,
+            'gpu_processing_times': self.gpu_processing_times.copy(),
+            'cpu_processing_times': self.cpu_processing_times.copy(),
+            'avg_gpu_time': np.mean(self.gpu_processing_times) if self.gpu_processing_times else 0,
+            'avg_cpu_time': np.mean(self.cpu_processing_times) if self.cpu_processing_times else 0
+        }
+
+        if stats['avg_gpu_time'] > 0 and stats['avg_cpu_time'] > 0:
+            stats['speedup_ratio'] = stats['avg_cpu_time'] / stats['avg_gpu_time']
+        else:
+            stats['speedup_ratio'] = 1.0
+
+        return stats
+
+    def benchmark_gpu_vs_cpu(self, test_frame: np.ndarray, iterations: int = 10) -> Dict:
+        """
+        Benchmark GPU vs CPU performance for image processing operations.
+
+        Args:
+            test_frame: Test frame for benchmarking
+            iterations: Number of iterations to run for each test
+
+        Returns:
+            Dictionary with benchmark results
+        """
+        results = {
+            'gpu_available': self.gpu_available,
+            'iterations': iterations,
+            'operations': {}
+        }
+
+        if not self.gpu_available:
+            print("⚠️ GPU not available for benchmarking")
+            return results
+
+        print(f"🏁 Starting GPU vs CPU benchmark ({iterations} iterations)...")
+
+        # Test color conversion
+        print("  Testing color conversion...")
+        cpu_times = []
+        gpu_times = []
+
+        for i in range(iterations):
+            # CPU test
+            start_time = time.time()
+            _ = cv2.cvtColor(test_frame, cv2.COLOR_BGR2GRAY)
+            cpu_times.append(time.time() - start_time)
+
+            # GPU test
+            start_time = time.time()
+            try:
+                gpu_frame = cv2.cuda_GpuMat()
+                gpu_frame.upload(test_frame)
+                gpu_gray = cv2.cuda_GpuMat()
+                cv2.cuda.cvtColor(gpu_frame, gpu_gray, cv2.COLOR_BGR2GRAY)
+                _ = gpu_gray.download()
+                gpu_times.append(time.time() - start_time)
+            except:
+                gpu_times.append(float('inf'))
+
+        results['operations']['color_conversion'] = {
+            'cpu_avg_time': np.mean(cpu_times),
+            'gpu_avg_time': np.mean(gpu_times),
+            'speedup': np.mean(cpu_times) / np.mean(gpu_times) if np.mean(gpu_times) > 0 else 0
+        }
+
+        # Test histogram equalization
+        print("  Testing histogram equalization...")
+        gray_frame = cv2.cvtColor(test_frame, cv2.COLOR_BGR2GRAY)
+        cpu_times = []
+        gpu_times = []
+
+        for i in range(iterations):
+            # CPU test
+            start_time = time.time()
+            _ = cv2.equalizeHist(gray_frame)
+            cpu_times.append(time.time() - start_time)
+
+            # GPU test
+            start_time = time.time()
+            try:
+                gpu_frame = cv2.cuda_GpuMat()
+                gpu_frame.upload(gray_frame)
+                gpu_result = cv2.cuda_GpuMat()
+                cv2.cuda.equalizeHist(gpu_frame, gpu_result)
+                _ = gpu_result.download()
+                gpu_times.append(time.time() - start_time)
+            except:
+                gpu_times.append(float('inf'))
+
+        results['operations']['histogram_equalization'] = {
+            'cpu_avg_time': np.mean(cpu_times),
+            'gpu_avg_time': np.mean(gpu_times),
+            'speedup': np.mean(cpu_times) / np.mean(gpu_times) if np.mean(gpu_times) > 0 else 0
+        }
+
+        print("✅ Benchmark completed")
+        return results
 
 @dataclass
 class FatigueMetrics:
@@ -46,15 +276,28 @@ class FatigueResult:
 
 class FatigueDetectionSystem:
     """
-    Main class for fatigue detection system
+    Main class for fatigue detection system with CUDA GPU acceleration
     """
-    
-    def __init__(self):
-        """Initialize the fatigue detection system"""
+
+    def __init__(self, enable_gpu: bool = True, gpu_device_id: int = 0):
+        """
+        Initialize the fatigue detection system with optional GPU acceleration.
+
+        Args:
+            enable_gpu: Whether to enable GPU acceleration (default: True)
+            gpu_device_id: CUDA device ID to use (default: 0)
+        """
+        # Initialize CUDA manager first
+        self.cuda_manager = CUDAManager(enable_gpu=enable_gpu, device_id=gpu_device_id)
+
+        # Initialize face detection and landmark prediction
         self.detector = dlib.get_frontal_face_detector()
         self.predictor = None
         self._initialize_predictor()
-        
+
+        # Initialize GPU-accelerated OpenCV objects if available
+        self._initialize_gpu_cv_objects()
+
         # --- INFRARED-OPTIMIZED THRESHOLDS for High Sensitivity ---
         # Adaptive EAR thresholds optimized for infrared video characteristics
         self.EAR_THRESHOLD_BASE = 0.25  # Higher base threshold for infrared
@@ -158,7 +401,30 @@ class FatigueDetectionSystem:
         except Exception as e:
             print(f"Error initializing or downloading predictor: {e}")
             self.predictor = None
-    
+
+    def _initialize_gpu_cv_objects(self):
+        """Initialize GPU-accelerated OpenCV objects if CUDA is available."""
+        self.gpu_clahe = None
+        self.gpu_bilateral_filter = None
+        self.gpu_morph_kernel = None
+
+        if self.cuda_manager.opencv_cuda_available:
+            try:
+                # Initialize GPU-accelerated CLAHE
+                self.gpu_clahe = cv2.cuda.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+
+                # Create morphological kernel on GPU
+                kernel_cpu = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+                self.gpu_morph_kernel = cv2.cuda_GpuMat()
+                self.gpu_morph_kernel.upload(kernel_cpu)
+
+                print("✅ GPU-accelerated OpenCV objects initialized")
+            except Exception as e:
+                print(f"⚠️ Failed to initialize GPU OpenCV objects: {e}")
+                self.cuda_manager.opencv_cuda_available = False
+        else:
+            print("ℹ️ OpenCV CUDA not available, using CPU fallback")
+
     def download_video(self, url: str) -> Optional[str]:
         """Download video from URL to temporary file, or use local path."""
         try:
@@ -185,33 +451,76 @@ class FatigueDetectionSystem:
             return None
 
     def calculate_ear(self, eye_landmarks: np.ndarray) -> float:
-        """Calculate Enhanced Eye Aspect Ratio (EAR) with noise reduction"""
+        """Calculate Enhanced Eye Aspect Ratio (EAR) with noise reduction and GPU acceleration"""
         try:
-            # Calculate vertical distances
-            vertical_1 = euclidean(eye_landmarks[1], eye_landmarks[5])
-            vertical_2 = euclidean(eye_landmarks[2], eye_landmarks[4])
-            
-            # Calculate horizontal distance
-            horizontal = euclidean(eye_landmarks[0], eye_landmarks[3])
-            
-            if horizontal == 0: 
+            # Try GPU-accelerated calculation first
+            if self.cuda_manager.is_gpu_available():
+                ear = self._calculate_ear_gpu(eye_landmarks)
+                if ear is not None:
+                    return ear
+
+            # Fallback to CPU calculation
+            return self._calculate_ear_cpu(eye_landmarks)
+
+        except Exception as e:
+            print(f"Error calculating EAR: {e}")
+            return 0.3
+
+    def _calculate_ear_gpu(self, eye_landmarks: np.ndarray) -> Optional[float]:
+        """GPU-accelerated EAR calculation using CuPy"""
+        try:
+            # Transfer landmarks to GPU
+            gpu_landmarks = self.cuda_manager.to_gpu(eye_landmarks)
+
+            # Calculate vertical distances using GPU
+            vertical_1 = float(cp.linalg.norm(gpu_landmarks[1] - gpu_landmarks[5]))
+            vertical_2 = float(cp.linalg.norm(gpu_landmarks[2] - gpu_landmarks[4]))
+
+            # Calculate horizontal distance using GPU
+            horizontal = float(cp.linalg.norm(gpu_landmarks[0] - gpu_landmarks[3]))
+
+            if horizontal == 0:
                 return 0.3  # Avoid division by zero
-            
+
             # Enhanced EAR calculation with weighted verticals
             ear = (vertical_1 + vertical_2) / (2.0 * horizontal)
-            
+
             # Apply smoothing to reduce noise
             if hasattr(self, 'last_ear') and self.last_ear is not None:
                 # Simple exponential smoothing
                 alpha = 0.3  # Smoothing factor
                 ear = alpha * ear + (1 - alpha) * self.last_ear
-            
+
             self.last_ear = ear
             return max(0.1, min(0.6, ear))  # Clamp to reasonable range
-            
+
         except Exception as e:
-            print(f"Error calculating EAR: {e}")
-            return 0.3
+            print(f"GPU EAR calculation failed: {e}")
+            return None
+
+    def _calculate_ear_cpu(self, eye_landmarks: np.ndarray) -> float:
+        """CPU fallback for EAR calculation"""
+        # Calculate vertical distances
+        vertical_1 = euclidean(eye_landmarks[1], eye_landmarks[5])
+        vertical_2 = euclidean(eye_landmarks[2], eye_landmarks[4])
+
+        # Calculate horizontal distance
+        horizontal = euclidean(eye_landmarks[0], eye_landmarks[3])
+
+        if horizontal == 0:
+            return 0.3  # Avoid division by zero
+
+        # Enhanced EAR calculation with weighted verticals
+        ear = (vertical_1 + vertical_2) / (2.0 * horizontal)
+
+        # Apply smoothing to reduce noise
+        if hasattr(self, 'last_ear') and self.last_ear is not None:
+            # Simple exponential smoothing
+            alpha = 0.3  # Smoothing factor
+            ear = alpha * ear + (1 - alpha) * self.last_ear
+
+        self.last_ear = ear
+        return max(0.1, min(0.6, ear))  # Clamp to reasonable range
     
     def extract_eye_landmarks(self, face_landmarks) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """Extract left and right eye landmarks from facial landmarks"""
@@ -234,32 +543,74 @@ class FatigueDetectionSystem:
             return None
     
     def calculate_mar(self, mouth_landmarks: np.ndarray) -> float:
-        """Calculate Mouth Aspect Ratio (MAR) for yawn detection"""
+        """Calculate Mouth Aspect Ratio (MAR) for yawn detection with GPU acceleration"""
         try:
-            # Calculate vertical distances (mouth height)
-            vertical_1 = euclidean(mouth_landmarks[2], mouth_landmarks[6])  # Top to bottom
-            vertical_2 = euclidean(mouth_landmarks[3], mouth_landmarks[7])  # Top to bottom (inner)
-            
-            # Calculate horizontal distance (mouth width)
-            horizontal = euclidean(mouth_landmarks[0], mouth_landmarks[4])  # Left to right
-            
-            if horizontal == 0:
-                return 0.3  # Avoid division by zero
-            
-            # MAR calculation - higher values indicate open mouth (yawning)
-            mar = (vertical_1 + vertical_2) / (2.0 * horizontal)
-            
-            # Apply smoothing to reduce noise
-            if hasattr(self, 'last_mar') and self.last_mar is not None:
-                alpha = 0.3  # Smoothing factor
-                mar = alpha * mar + (1 - alpha) * self.last_mar
-            
-            self.last_mar = mar
-            return max(0.1, min(2.0, mar))  # Clamp to reasonable range
+            # Try GPU-accelerated calculation first
+            if self.cuda_manager.is_gpu_available():
+                mar = self._calculate_mar_gpu(mouth_landmarks)
+                if mar is not None:
+                    return mar
+
+            # Fallback to CPU calculation
+            return self._calculate_mar_cpu(mouth_landmarks)
 
         except Exception as e:
             print(f"Error calculating MAR: {e}")
             return 0.3
+
+    def _calculate_mar_gpu(self, mouth_landmarks: np.ndarray) -> Optional[float]:
+        """GPU-accelerated MAR calculation using CuPy"""
+        try:
+            # Transfer landmarks to GPU
+            gpu_landmarks = self.cuda_manager.to_gpu(mouth_landmarks)
+
+            # Calculate vertical distances (mouth height) using GPU
+            vertical_1 = float(cp.linalg.norm(gpu_landmarks[2] - gpu_landmarks[6]))
+            vertical_2 = float(cp.linalg.norm(gpu_landmarks[3] - gpu_landmarks[7]))
+
+            # Calculate horizontal distance (mouth width) using GPU
+            horizontal = float(cp.linalg.norm(gpu_landmarks[0] - gpu_landmarks[4]))
+
+            if horizontal == 0:
+                return 0.3  # Avoid division by zero
+
+            # MAR calculation - higher values indicate open mouth (yawning)
+            mar = (vertical_1 + vertical_2) / (2.0 * horizontal)
+
+            # Apply smoothing to reduce noise
+            if hasattr(self, 'last_mar') and self.last_mar is not None:
+                alpha = 0.3  # Smoothing factor
+                mar = alpha * mar + (1 - alpha) * self.last_mar
+
+            self.last_mar = mar
+            return max(0.1, min(2.0, mar))  # Clamp to reasonable range
+
+        except Exception as e:
+            print(f"GPU MAR calculation failed: {e}")
+            return None
+
+    def _calculate_mar_cpu(self, mouth_landmarks: np.ndarray) -> float:
+        """CPU fallback for MAR calculation"""
+        # Calculate vertical distances (mouth height)
+        vertical_1 = euclidean(mouth_landmarks[2], mouth_landmarks[6])  # Top to bottom
+        vertical_2 = euclidean(mouth_landmarks[3], mouth_landmarks[7])  # Top to bottom (inner)
+
+        # Calculate horizontal distance (mouth width)
+        horizontal = euclidean(mouth_landmarks[0], mouth_landmarks[4])  # Left to right
+
+        if horizontal == 0:
+            return 0.3  # Avoid division by zero
+
+        # MAR calculation - higher values indicate open mouth (yawning)
+        mar = (vertical_1 + vertical_2) / (2.0 * horizontal)
+
+        # Apply smoothing to reduce noise
+        if hasattr(self, 'last_mar') and self.last_mar is not None:
+            alpha = 0.3  # Smoothing factor
+            mar = alpha * mar + (1 - alpha) * self.last_mar
+
+        self.last_mar = mar
+        return max(0.1, min(2.0, mar))  # Clamp to reasonable range
 
     def detect_micro_movements(self, current_landmarks) -> float:
         """Detect micro-movements that indicate drowsiness in infrared video"""
@@ -626,18 +977,44 @@ class FatigueDetectionSystem:
         return min(0.95, np.mean(confidence_factors))
 
     def assess_infrared_frame_quality(self, gray_frame: np.ndarray) -> float:
-        """Assess the quality of an infrared frame for drowsiness detection"""
+        """Assess the quality of an infrared frame for drowsiness detection with GPU acceleration"""
         try:
-            # Calculate contrast using standard deviation
-            contrast = np.std(gray_frame)
+            # Try GPU-accelerated quality assessment first
+            if self.cuda_manager.is_gpu_available():
+                quality_score = self._assess_frame_quality_gpu(gray_frame)
+                if quality_score is not None:
+                    return quality_score
 
-            # Calculate sharpness using Laplacian variance
-            laplacian = cv2.Laplacian(gray_frame, cv2.CV_64F)
-            sharpness = laplacian.var()
+            # Fallback to CPU processing
+            return self._assess_frame_quality_cpu(gray_frame)
 
-            # Calculate brightness distribution
-            hist = cv2.calcHist([gray_frame], [0], None, [256], [0, 256])
-            brightness_uniformity = 1.0 - (np.std(hist) / np.mean(hist))
+        except Exception as e:
+            print(f"Error assessing frame quality: {e}")
+            return 0.5  # Default medium quality
+
+    def _assess_frame_quality_gpu(self, gray_frame: np.ndarray) -> Optional[float]:
+        """GPU-accelerated frame quality assessment using CuPy"""
+        try:
+            # Transfer frame to GPU
+            gpu_frame = self.cuda_manager.to_gpu(gray_frame)
+
+            # Calculate contrast using standard deviation (GPU)
+            contrast = float(cp.std(gpu_frame))
+
+            # Calculate sharpness using Laplacian variance (GPU)
+            # Create Laplacian kernel
+            laplacian_kernel = cp.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=cp.float32)
+
+            # Apply convolution for Laplacian
+            gpu_frame_float = gpu_frame.astype(cp.float32)
+            laplacian = cp.abs(cp.convolve2d(gpu_frame_float, laplacian_kernel, mode='same'))
+            sharpness = float(cp.var(laplacian))
+
+            # Calculate brightness distribution (GPU)
+            hist, _ = cp.histogram(gpu_frame, bins=256, range=(0, 256))
+            hist_mean = float(cp.mean(hist))
+            hist_std = float(cp.std(hist))
+            brightness_uniformity = 1.0 - (hist_std / max(hist_mean, 1e-6))
 
             # Combine metrics for overall quality score (0-1)
             quality_score = min(1.0, (contrast / 50.0) * 0.4 + (sharpness / 500.0) * 0.4 + brightness_uniformity * 0.2)
@@ -645,11 +1022,31 @@ class FatigueDetectionSystem:
             return quality_score
 
         except Exception as e:
-            print(f"Error assessing frame quality: {e}")
-            return 0.5  # Default medium quality
+            print(f"GPU quality assessment failed: {e}")
+            return None
+
+    def _assess_frame_quality_cpu(self, gray_frame: np.ndarray) -> float:
+        """CPU fallback for frame quality assessment"""
+        # Calculate contrast using standard deviation
+        contrast = np.std(gray_frame)
+
+        # Calculate sharpness using Laplacian variance
+        laplacian = cv2.Laplacian(gray_frame, cv2.CV_64F)
+        sharpness = laplacian.var()
+
+        # Calculate brightness distribution
+        hist = cv2.calcHist([gray_frame], [0], None, [256], [0, 256])
+        brightness_uniformity = 1.0 - (np.std(hist) / np.mean(hist))
+
+        # Combine metrics for overall quality score (0-1)
+        quality_score = min(1.0, (contrast / 50.0) * 0.4 + (sharpness / 500.0) * 0.4 + brightness_uniformity * 0.2)
+
+        return quality_score
 
     def enhance_infrared_frame(self, gray_frame: np.ndarray) -> np.ndarray:
-        """Enhanced preprocessing specifically for infrared video frames"""
+        """Enhanced preprocessing specifically for infrared video frames with GPU acceleration"""
+        start_time = time.time()
+
         try:
             # Assess frame quality first
             quality_score = self.assess_infrared_frame_quality(gray_frame)
@@ -662,26 +1059,18 @@ class FatigueDetectionSystem:
             else:
                 enhancement_factor = 1.0
 
-            # Step 1: Advanced histogram equalization with CLAHE
-            clip_limit = 3.0 * enhancement_factor
-            clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8,8))
-            enhanced = clahe.apply(gray_frame)
+            # Try GPU-accelerated processing first
+            if self.cuda_manager.opencv_cuda_available:
+                enhanced = self._enhance_infrared_frame_gpu(gray_frame, enhancement_factor)
+                if enhanced is not None:
+                    processing_time = time.time() - start_time
+                    self.cuda_manager.gpu_processing_times.append(processing_time)
+                    return enhanced
 
-            # Step 2: Gamma correction for infrared contrast enhancement
-            gamma = 1.2 * enhancement_factor  # Adjust gamma based on quality
-            gamma_table = np.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
-            enhanced = cv2.LUT(enhanced, gamma_table)
-
-            # Step 3: Bilateral filtering for noise reduction while preserving edges
-            enhanced = cv2.bilateralFilter(enhanced, 9, 75, 75)
-
-            # Step 4: Adaptive histogram equalization for local contrast
-            enhanced = cv2.equalizeHist(enhanced)
-
-            # Step 5: Morphological operations to enhance facial features
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-            enhanced = cv2.morphologyEx(enhanced, cv2.MORPH_CLOSE, kernel)
-
+            # Fallback to CPU processing
+            enhanced = self._enhance_infrared_frame_cpu(gray_frame, enhancement_factor)
+            processing_time = time.time() - start_time
+            self.cuda_manager.cpu_processing_times.append(processing_time)
             return enhanced
 
         except Exception as e:
@@ -689,13 +1078,110 @@ class FatigueDetectionSystem:
             # Fallback to basic histogram equalization
             return cv2.equalizeHist(gray_frame)
 
+    def _enhance_infrared_frame_gpu(self, gray_frame: np.ndarray, enhancement_factor: float) -> Optional[np.ndarray]:
+        """GPU-accelerated infrared frame enhancement using OpenCV CUDA"""
+        try:
+            # Upload frame to GPU
+            gpu_frame = cv2.cuda_GpuMat()
+            gpu_frame.upload(gray_frame)
+
+            # Step 1: Advanced histogram equalization with CLAHE (GPU)
+            if self.gpu_clahe is not None:
+                clip_limit = 3.0 * enhancement_factor
+                # Update CLAHE parameters if needed
+                self.gpu_clahe.setClipLimit(clip_limit)
+                gpu_enhanced = cv2.cuda_GpuMat()
+                self.gpu_clahe.apply(gpu_frame, gpu_enhanced)
+            else:
+                gpu_enhanced = gpu_frame
+
+            # Step 2: Gamma correction for infrared contrast enhancement
+            gamma = 1.2 * enhancement_factor
+            gamma_table = np.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
+            gpu_gamma_table = cv2.cuda_GpuMat()
+            gpu_gamma_table.upload(gamma_table)
+            cv2.cuda.LUT(gpu_enhanced, gpu_gamma_table, gpu_enhanced)
+
+            # Step 3: Bilateral filtering (GPU) - Note: Limited GPU support, may fallback
+            try:
+                gpu_filtered = cv2.cuda_GpuMat()
+                cv2.cuda.bilateralFilter(gpu_enhanced, gpu_filtered, 9, 75, 75)
+                gpu_enhanced = gpu_filtered
+            except:
+                # Bilateral filter not available on GPU, continue with current result
+                pass
+
+            # Step 4: Adaptive histogram equalization for local contrast (GPU)
+            cv2.cuda.equalizeHist(gpu_enhanced, gpu_enhanced)
+
+            # Step 5: Morphological operations (GPU)
+            if self.gpu_morph_kernel is not None:
+                gpu_morphed = cv2.cuda_GpuMat()
+                cv2.cuda.morphologyEx(gpu_enhanced, gpu_morphed, cv2.MORPH_CLOSE, self.gpu_morph_kernel)
+                gpu_enhanced = gpu_morphed
+
+            # Download result from GPU
+            enhanced = gpu_enhanced.download()
+            return enhanced
+
+        except Exception as e:
+            print(f"GPU enhancement failed, falling back to CPU: {e}")
+            return None
+
+    def _enhance_infrared_frame_cpu(self, gray_frame: np.ndarray, enhancement_factor: float) -> np.ndarray:
+        """CPU fallback for infrared frame enhancement"""
+        # Step 1: Advanced histogram equalization with CLAHE
+        clip_limit = 3.0 * enhancement_factor
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8,8))
+        enhanced = clahe.apply(gray_frame)
+
+        # Step 2: Gamma correction for infrared contrast enhancement
+        gamma = 1.2 * enhancement_factor  # Adjust gamma based on quality
+        gamma_table = np.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
+        enhanced = cv2.LUT(enhanced, gamma_table)
+
+        # Step 3: Bilateral filtering for noise reduction while preserving edges
+        enhanced = cv2.bilateralFilter(enhanced, 9, 75, 75)
+
+        # Step 4: Adaptive histogram equalization for local contrast
+        enhanced = cv2.equalizeHist(enhanced)
+
+        # Step 5: Morphological operations to enhance facial features
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        enhanced = cv2.morphologyEx(enhanced, cv2.MORPH_CLOSE, kernel)
+
+        return enhanced
+
+    def _convert_to_grayscale_gpu(self, frame: np.ndarray) -> np.ndarray:
+        """GPU-accelerated color conversion to grayscale"""
+        try:
+            if self.cuda_manager.opencv_cuda_available:
+                # Upload frame to GPU
+                gpu_frame = cv2.cuda_GpuMat()
+                gpu_frame.upload(frame)
+
+                # Convert to grayscale on GPU
+                gpu_gray = cv2.cuda_GpuMat()
+                cv2.cuda.cvtColor(gpu_frame, gpu_gray, cv2.COLOR_BGR2GRAY)
+
+                # Download result
+                gray = gpu_gray.download()
+                return gray
+            else:
+                # Fallback to CPU
+                return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        except Exception as e:
+            print(f"GPU color conversion failed, using CPU: {e}")
+            return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
     def analyze_frame(self, frame: np.ndarray, frame_number: int, timestamp: float) -> FatigueMetrics:
-        """Enhanced frame analysis with infrared-optimized preprocessing and adaptive thresholds"""
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        """Enhanced frame analysis with GPU-accelerated preprocessing and adaptive thresholds"""
+        # GPU-accelerated color conversion if available
+        gray = self._convert_to_grayscale_gpu(frame)
         left_ear, right_ear = -1.0, -1.0
         mar_value = -1.0
 
-        # Apply enhanced infrared preprocessing
+        # Apply enhanced infrared preprocessing (already GPU-accelerated)
         gray = self.enhance_infrared_frame(gray)
         
         faces = self.detector(gray)
@@ -913,7 +1399,10 @@ class FatigueDetectionSystem:
                 # Results
                 "fatigue_level": fatigue_level,
                 "fatigue_factors": fatigue_factors,
-                "detection_method": "enhanced_landmark_v3.0_with_yawning"
+                "detection_method": "enhanced_landmark_v3.0_with_yawning_gpu",
+
+                # GPU Performance Statistics
+                "gpu_performance": self.cuda_manager.get_performance_stats()
             }
             
             result = FatigueResult(
@@ -939,10 +1428,36 @@ class FatigueDetectionSystem:
                 os.unlink(local_video_path)
                 print(f"🧹 Cleaned up temporary file: {local_video_path}")
 
+    def get_gpu_status(self) -> Dict:
+        """Get comprehensive GPU status and capabilities"""
+        return {
+            'gpu_available': self.cuda_manager.is_gpu_available(),
+            'cupy_available': self.cuda_manager.cupy_available,
+            'opencv_cuda_available': self.cuda_manager.opencv_cuda_available,
+            'device_info': self.cuda_manager.get_device_info(),
+            'performance_stats': self.cuda_manager.get_performance_stats()
+        }
+
+    def run_benchmark(self, test_frame: np.ndarray = None, iterations: int = 10) -> Dict:
+        """Run GPU vs CPU performance benchmark"""
+        if test_frame is None:
+            # Create a test frame if none provided
+            test_frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+
+        return self.cuda_manager.benchmark_gpu_vs_cpu(test_frame, iterations)
+
 
 def main(args):
-    """Main function to run fatigue detection on a single video."""
-    detector = FatigueDetectionSystem()
+    """Main function to run fatigue detection on a single video with GPU acceleration support."""
+    # Initialize detector with GPU acceleration settings
+    enable_gpu = not args.disable_gpu and os.getenv('DISABLE_GPU', 'false').lower() != 'true'
+    gpu_device_id = args.gpu_device if hasattr(args, 'gpu_device') else int(os.getenv('CUDA_DEVICE_ID', '0'))
+
+    print(f"🚀 Initializing Fatigue Detection System (GPU: {'enabled' if enable_gpu else 'disabled'})")
+    if enable_gpu:
+        print(f"🎮 Using CUDA device: {gpu_device_id}")
+
+    detector = FatigueDetectionSystem(enable_gpu=enable_gpu, gpu_device_id=gpu_device_id)
     driver_name = os.path.splitext(os.path.basename(args.output_json))[0]
 
     # --- Correctly call the single video analyzer ---
@@ -982,11 +1497,15 @@ def main(args):
         print(f"\nℹ️ Note: Video output argument is present but not implemented in this version.")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Generate a merged video and JSON fatigue report.")
+    parser = argparse.ArgumentParser(description="Generate a merged video and JSON fatigue report with GPU acceleration support.")
     parser.add_argument('--front_video', type=str, required=True, help='Path to the front-facing driver video.')
     parser.add_argument('--rear_video', type=str, help='(Optional) Path to the rear-facing driver video.')
     parser.add_argument('--output_video', type=str, required=True, help='Path to save the output merged video file (e.g., output.mp4).')
     parser.add_argument('--output_json', type=str, required=True, help='Path to save the final JSON report file (e.g., report.json).')
+
+    # GPU acceleration options
+    parser.add_argument('--disable-gpu', action='store_true', help='Disable GPU acceleration and use CPU only.')
+    parser.add_argument('--gpu-device', type=int, default=0, help='CUDA device ID to use for GPU acceleration (default: 0).')
     
     parsed_args = parser.parse_args()
     main(parsed_args)
