@@ -55,22 +55,25 @@ class FatigueDetectionSystem:
         self.predictor = None
         self._initialize_predictor()
         
-        # --- ENHANCED THRESHOLDS for 90% Precision ---
-        # Adaptive EAR thresholds based on individual calibration
-        self.EAR_THRESHOLD_BASE = 0.22  # Lowered for better sensitivity
-        self.EAR_THRESHOLD_ADAPTIVE = 0.22  # Will be calibrated per video
-        self.EAR_CALIBRATION_FRAMES = 60  # Frames to use for calibration
-        
-        # PERCLOS thresholds - more sensitive detection
-        self.PERCLOS_THRESHOLD_MILD = 0.15    # 15% for mild fatigue
-        self.PERCLOS_THRESHOLD_MODERATE = 0.25 # 25% for moderate fatigue  
-        self.PERCLOS_THRESHOLD_SEVERE = 0.35   # 35% for severe fatigue
-        self.PERCLOS_WINDOW_SECONDS = 2.0      # Longer window for stability
-        
-        # Multi-level fatigue detection
-        self.FATIGUE_THRESHOLD_MILD = 0.30     # 30% for early detection
-        self.FATIGUE_THRESHOLD_MODERATE = 0.50 # 50% for moderate fatigue
-        self.FATIGUE_THRESHOLD_SEVERE = 0.70   # 70% for severe fatigue
+        # --- INFRARED-OPTIMIZED THRESHOLDS for High Sensitivity ---
+        # Adaptive EAR thresholds optimized for infrared video characteristics
+        self.EAR_THRESHOLD_BASE = 0.25  # Higher base threshold for infrared
+        self.EAR_THRESHOLD_ADAPTIVE = 0.25  # Will be calibrated per video
+        self.EAR_CALIBRATION_FRAMES = 90  # More frames for stable infrared calibration
+
+        # PERCLOS thresholds - highly sensitive for infrared drowsiness detection
+        self.PERCLOS_THRESHOLD_MILD = 0.08    # 8% for early detection in infrared
+        self.PERCLOS_THRESHOLD_MODERATE = 0.15 # 15% for moderate fatigue
+        self.PERCLOS_THRESHOLD_SEVERE = 0.25   # 25% for severe fatigue
+        self.PERCLOS_WINDOW_SECONDS = 3.0      # Longer window for infrared stability
+
+        # Multi-level fatigue detection - optimized for infrared sensitivity
+        self.FATIGUE_THRESHOLD_MILD = 0.15     # 15% for early infrared detection
+        self.FATIGUE_THRESHOLD_MODERATE = 0.35 # 35% for moderate fatigue
+        self.FATIGUE_THRESHOLD_SEVERE = 0.60   # 60% for severe fatigue
+
+        # Confidence thresholds for precision control
+        self.MIN_CONFIDENCE_THRESHOLD = 0.60   # Minimum confidence for fatigue detection
         
         # Blink analysis parameters
         self.MIN_BLINK_DURATION = 3    # Minimum frames for valid blink
@@ -110,12 +113,25 @@ class FatigueDetectionSystem:
         self.total_analyzed_frames = 0
         self.is_mask_present = False
         
-        # Calibration data
+        # Infrared-optimized calibration data
         self.calibration_ears = []
+        self.calibration_mars = []
         self.baseline_ear = None
         self.baseline_mar = None  # Mouth aspect ratio baseline
         self.is_calibrated = False
         self.last_ear = None
+        self.infrared_mode = True  # Flag for infrared-specific processing
+
+        # Infrared video quality assessment
+        self.frame_quality_scores = []
+        self.low_quality_frame_count = 0
+        self.infrared_enhancement_factor = 1.0
+
+        # Multi-modal detection for infrared
+        self.head_pose_history = []
+        self.micro_movement_scores = []
+        self.temporal_patterns = []
+        self.previous_landmarks = None
         
     def _initialize_predictor(self):
         """Initialize facial landmark predictor"""
@@ -240,11 +256,82 @@ class FatigueDetectionSystem:
             
             self.last_mar = mar
             return max(0.1, min(2.0, mar))  # Clamp to reasonable range
-            
+
         except Exception as e:
             print(f"Error calculating MAR: {e}")
             return 0.3
-    
+
+    def detect_micro_movements(self, current_landmarks) -> float:
+        """Detect micro-movements that indicate drowsiness in infrared video"""
+        try:
+            if self.previous_landmarks is None:
+                self.previous_landmarks = current_landmarks
+                return 0.0
+
+            # Calculate movement of key facial points
+            movement_score = 0.0
+            key_points = [30, 33, 36, 39, 42, 45]  # Nose tip, eye corners
+
+            for point_idx in key_points:
+                prev_point = (self.previous_landmarks.part(point_idx).x, self.previous_landmarks.part(point_idx).y)
+                curr_point = (current_landmarks.part(point_idx).x, current_landmarks.part(point_idx).y)
+                movement = euclidean(prev_point, curr_point)
+                movement_score += movement
+
+            # Normalize by number of points
+            movement_score /= len(key_points)
+
+            # Store for temporal analysis
+            self.micro_movement_scores.append(movement_score)
+            if len(self.micro_movement_scores) > 30:  # Keep last 30 frames
+                self.micro_movement_scores.pop(0)
+
+            self.previous_landmarks = current_landmarks
+
+            # Low movement indicates potential drowsiness
+            return max(0.0, 1.0 - (movement_score / 10.0))  # Invert and normalize
+
+        except Exception as e:
+            print(f"Error detecting micro-movements: {e}")
+            return 0.0
+
+    def analyze_head_pose(self, face_landmarks) -> dict:
+        """Analyze head pose for drowsiness indicators in infrared video"""
+        try:
+            # Get key facial points for pose estimation
+            nose_tip = (face_landmarks.part(30).x, face_landmarks.part(30).y)
+            chin = (face_landmarks.part(8).x, face_landmarks.part(8).y)
+            left_eye = (face_landmarks.part(36).x, face_landmarks.part(36).y)
+            right_eye = (face_landmarks.part(45).x, face_landmarks.part(45).y)
+
+            # Calculate head tilt (roll)
+            eye_center_x = (left_eye[0] + right_eye[0]) / 2
+            eye_center_y = (left_eye[1] + right_eye[1]) / 2
+
+            # Head nod detection (pitch) - distance from eyes to chin
+            face_height = euclidean((eye_center_x, eye_center_y), chin)
+
+            # Head turn detection (yaw) - nose position relative to eye center
+            nose_offset = abs(nose_tip[0] - eye_center_x)
+            face_width = euclidean(left_eye, right_eye)
+
+            pose_data = {
+                'head_down': face_height < 80,  # Threshold for head down
+                'head_turned': (nose_offset / face_width) > 0.3 if face_width > 0 else False,
+                'face_height': face_height,
+                'nose_offset_ratio': nose_offset / face_width if face_width > 0 else 0
+            }
+
+            self.head_pose_history.append(pose_data)
+            if len(self.head_pose_history) > 30:
+                self.head_pose_history.pop(0)
+
+            return pose_data
+
+        except Exception as e:
+            print(f"Error analyzing head pose: {e}")
+            return {'head_down': False, 'head_turned': False, 'face_height': 0, 'nose_offset_ratio': 0}
+
     def detect_mask(self, face_landmarks) -> bool:
         """Detect if person is wearing a mask based on landmark visibility"""
         try:
@@ -276,7 +363,7 @@ class FatigueDetectionSystem:
             return False
     
     def calibrate_thresholds(self, avg_ear: float, avg_mar: float, frame_number: int):
-        """Calibrate EAR and MAR thresholds based on initial frames"""
+        """Infrared-optimized calibration for EAR and MAR thresholds"""
         if frame_number < self.EAR_CALIBRATION_FRAMES:
             if avg_ear > 0:
                 self.calibration_ears.append(avg_ear)
@@ -285,21 +372,22 @@ class FatigueDetectionSystem:
                     self.calibration_mars = []
                 self.calibration_mars.append(avg_mar)
         elif frame_number == self.EAR_CALIBRATION_FRAMES:
-            # Calculate baseline EAR
+            # Calculate baseline EAR with infrared-specific adjustments
             if self.calibration_ears:
                 self.baseline_ear = np.mean(self.calibration_ears)
-                self.EAR_THRESHOLD_ADAPTIVE = max(0.18, self.baseline_ear * 0.8)
-            
-            # Calculate baseline MAR
+                # More aggressive threshold for infrared - use 85% of baseline instead of 80%
+                self.EAR_THRESHOLD_ADAPTIVE = max(0.20, self.baseline_ear * 0.85)
+
+            # Calculate baseline MAR with infrared sensitivity
             if hasattr(self, 'calibration_mars') and self.calibration_mars:
                 self.baseline_mar = np.mean(self.calibration_mars)
-                # Yawn threshold is typically 1.5-2x baseline MAR
-                self.YAWN_THRESHOLD = max(0.6, self.baseline_mar * 1.8)
-            
+                # Lower yawn threshold for infrared - use 1.6x instead of 1.8x
+                self.YAWN_THRESHOLD = max(0.5, self.baseline_mar * 1.6)
+
             self.is_calibrated = True
-            print(f"📊 Calibrated - EAR: baseline={self.baseline_ear:.3f}, threshold={self.EAR_THRESHOLD_ADAPTIVE:.3f}")
+            print(f"📊 Infrared Calibrated - EAR: baseline={self.baseline_ear:.3f}, threshold={self.EAR_THRESHOLD_ADAPTIVE:.3f}")
             if self.baseline_mar:
-                print(f"📊 Calibrated - MAR: baseline={self.baseline_mar:.3f}, yawn_threshold={self.YAWN_THRESHOLD:.3f}")
+                print(f"📊 Infrared Calibrated - MAR: baseline={self.baseline_mar:.3f}, yawn_threshold={self.YAWN_THRESHOLD:.3f}")
     
     def detect_blink_patterns(self, is_closed: bool, frame_number: int):
         """Enhanced blink pattern detection"""
@@ -372,12 +460,25 @@ class FatigueDetectionSystem:
         return weighted_closed / total_weight if total_weight > 0 else 0.0
     
     def calculate_fatigue_score(self, perclos_score: float, avg_ear: float, blink_freq: float, timestamp: float) -> tuple:
-        """Enhanced multi-factor fatigue scoring with yawning detection"""
+        """Enhanced multi-factor fatigue scoring with infrared-specific multi-modal detection"""
         fatigue_factors = {}
-        
+
         # Calculate yawning metrics
         yawn_rate = self.yawn_counter / max(1, timestamp)  # yawns per second
         yawn_percentage = (self.yawn_frames / max(1, self.total_analyzed_frames)) * 100
+
+        # Calculate multi-modal scores for infrared
+        micro_movement_factor = 0.0
+        head_pose_factor = 0.0
+
+        if self.micro_movement_scores:
+            avg_micro_movement = np.mean(self.micro_movement_scores[-10:])  # Last 10 frames
+            micro_movement_factor = min(1.0, avg_micro_movement)
+
+        if self.head_pose_history:
+            recent_poses = self.head_pose_history[-10:]  # Last 10 frames
+            head_down_ratio = sum(1 for pose in recent_poses if pose['head_down']) / len(recent_poses)
+            head_pose_factor = head_down_ratio
         
         # Factor 1: PERCLOS analysis (30% weight - reduced to accommodate yawning)
         if perclos_score >= self.PERCLOS_THRESHOLD_SEVERE:
@@ -455,13 +556,15 @@ class FatigueDetectionSystem:
         fatigue_factors['yawn_percentage'] = yawn_percentage
         fatigue_factors['mask_detected'] = self.is_mask_present
         
-        # Weighted combination with yawning priority
+        # Infrared-optimized weighted combination with multi-modal detection
         base_fatigue = (
-            perclos_factor * 0.30 +
-            ear_factor * 0.25 +
-            yawn_factor * 0.25 +
-            blink_factor * 0.15 +
-            microsleep_factor * 0.05
+            perclos_factor * 0.25 +        # Reduced weight for PERCLOS
+            ear_factor * 0.20 +             # Reduced weight for EAR
+            yawn_factor * 0.20 +            # Maintained weight for yawning
+            blink_factor * 0.15 +           # Maintained weight for blinking
+            microsleep_factor * 0.05 +      # Maintained weight for microsleep
+            micro_movement_factor * 0.10 +  # New: micro-movement detection
+            head_pose_factor * 0.05         # New: head pose analysis
         ) * 100
         
         # Apply mask compensation if detected
@@ -522,14 +625,78 @@ class FatigueDetectionSystem:
         
         return min(0.95, np.mean(confidence_factors))
 
+    def assess_infrared_frame_quality(self, gray_frame: np.ndarray) -> float:
+        """Assess the quality of an infrared frame for drowsiness detection"""
+        try:
+            # Calculate contrast using standard deviation
+            contrast = np.std(gray_frame)
+
+            # Calculate sharpness using Laplacian variance
+            laplacian = cv2.Laplacian(gray_frame, cv2.CV_64F)
+            sharpness = laplacian.var()
+
+            # Calculate brightness distribution
+            hist = cv2.calcHist([gray_frame], [0], None, [256], [0, 256])
+            brightness_uniformity = 1.0 - (np.std(hist) / np.mean(hist))
+
+            # Combine metrics for overall quality score (0-1)
+            quality_score = min(1.0, (contrast / 50.0) * 0.4 + (sharpness / 500.0) * 0.4 + brightness_uniformity * 0.2)
+
+            return quality_score
+
+        except Exception as e:
+            print(f"Error assessing frame quality: {e}")
+            return 0.5  # Default medium quality
+
+    def enhance_infrared_frame(self, gray_frame: np.ndarray) -> np.ndarray:
+        """Enhanced preprocessing specifically for infrared video frames"""
+        try:
+            # Assess frame quality first
+            quality_score = self.assess_infrared_frame_quality(gray_frame)
+            self.frame_quality_scores.append(quality_score)
+
+            if quality_score < 0.3:
+                self.low_quality_frame_count += 1
+                # Apply more aggressive enhancement for low quality frames
+                enhancement_factor = 1.5
+            else:
+                enhancement_factor = 1.0
+
+            # Step 1: Advanced histogram equalization with CLAHE
+            clip_limit = 3.0 * enhancement_factor
+            clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8,8))
+            enhanced = clahe.apply(gray_frame)
+
+            # Step 2: Gamma correction for infrared contrast enhancement
+            gamma = 1.2 * enhancement_factor  # Adjust gamma based on quality
+            gamma_table = np.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
+            enhanced = cv2.LUT(enhanced, gamma_table)
+
+            # Step 3: Bilateral filtering for noise reduction while preserving edges
+            enhanced = cv2.bilateralFilter(enhanced, 9, 75, 75)
+
+            # Step 4: Adaptive histogram equalization for local contrast
+            enhanced = cv2.equalizeHist(enhanced)
+
+            # Step 5: Morphological operations to enhance facial features
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            enhanced = cv2.morphologyEx(enhanced, cv2.MORPH_CLOSE, kernel)
+
+            return enhanced
+
+        except Exception as e:
+            print(f"Error in infrared enhancement: {e}")
+            # Fallback to basic histogram equalization
+            return cv2.equalizeHist(gray_frame)
+
     def analyze_frame(self, frame: np.ndarray, frame_number: int, timestamp: float) -> FatigueMetrics:
-        """Enhanced frame analysis with yawning, mask detection, and adaptive thresholds"""
+        """Enhanced frame analysis with infrared-optimized preprocessing and adaptive thresholds"""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         left_ear, right_ear = -1.0, -1.0
         mar_value = -1.0
-        
-        # Apply histogram equalization for better face detection in varying lighting
-        gray = cv2.equalizeHist(gray)
+
+        # Apply enhanced infrared preprocessing
+        gray = self.enhance_infrared_frame(gray)
         
         faces = self.detector(gray)
         self.total_analyzed_frames += 1
@@ -550,7 +717,11 @@ class FatigueDetectionSystem:
                 mouth = self.extract_mouth_landmarks(landmarks)
                 if mouth is not None:
                     mar_value = self.calculate_mar(mouth)
-                
+
+                # Multi-modal detection for infrared
+                micro_movement_score = self.detect_micro_movements(landmarks)
+                head_pose_data = self.analyze_head_pose(landmarks)
+
                 # Detect mask presence
                 is_masked = self.detect_mask(landmarks)
                 if is_masked:
@@ -706,8 +877,10 @@ class FatigueDetectionSystem:
                 else:
                     fatigue_level = 'normal'
 
-            # Enhanced fatigue detection - more sensitive thresholds
-            is_fatigue = fatigue_percentage >= (self.FATIGUE_THRESHOLD_MILD * 100)
+            # Enhanced fatigue detection with confidence threshold for precision
+            fatigue_detected = fatigue_percentage >= (self.FATIGUE_THRESHOLD_MILD * 100)
+            confidence_met = confidence >= self.MIN_CONFIDENCE_THRESHOLD
+            is_fatigue = fatigue_detected and confidence_met
             
             analysis_details = {
                 "video_fps": fps, 

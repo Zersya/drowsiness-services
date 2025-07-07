@@ -1,0 +1,202 @@
+{
+  "timestamp": "2025-07-07 11:14:20",
+  "system_version": "enhanced_landmark_v2.0_validated",
+  "summary": {
+    "total_videos_analyzed": 18,
+    "total_videos_with_ground_truth": 18,
+    "confusion_matrix": {
+      "TP": 7,
+      "FP": 9,
+      "TN": 1,
+      "FN": 1
+    },
+    "metrics": {
+      "accuracy": 0.4444444444444444,
+      "precision": 0.4375,
+      "recall": 0.875,
+      "f1_score": 0.5833333333333334
+    }
+  },
+  "detailed_results": [
+    {
+      "video": "862430062032285_ch2_20250707114124_20250707114134_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 35.0,
+      "confidence": 0.85
+    },
+    {
+      "video": "862430065877926_ch2_20250707114126_20250707114136_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 36.5,
+      "confidence": 0.9
+    },
+    {
+      "video": "862430062032954_ch2_20250707114119_20250707114129_FALSE_SMOKING.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "SMOKING",
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 10.0,
+      "confidence": 0.775
+    },
+    {
+      "video": "862430063001511_ch2_20250707114049_20250707114059_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 42.0,
+      "confidence": 0.8
+    },
+    {
+      "video": "862430062056573_ch2_20250707114128_20250707114138_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 44.0,
+      "confidence": 0.85
+    },
+    {
+      "video": "862430062066481_ch2_20250707113719_20250707113729_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 36.5,
+      "confidence": 0.8
+    },
+    {
+      "video": "867395073643351_ch2_20250707113714_20250707113724_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 51.0,
+      "confidence": 0.675
+    },
+    {
+      "video": "862430065982221_ch2_20250707113554_20250707113604_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 30,
+      "confidence": 0.725
+    },
+    {
+      "video": "862430065964096_ch2_20250707113651_20250707113701_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 54.75,
+      "confidence": 0.825
+    },
+    {
+      "video": "862430062555897_ch2_20250707113725_20250707113735_TRUE_EYECLOSED.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "EYECLOSED",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 34.5,
+      "confidence": 0.9
+    },
+    {
+      "video": "862430065910040_ch2_20250707113605_20250707113615_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 34.5,
+      "confidence": 0.85
+    },
+    {
+      "video": "862430065970580_ch2_20250707114053_20250707114103_FALSE_SMOKING.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "SMOKING",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 28.75,
+      "confidence": 0.85
+    },
+    {
+      "video": "862430065994473_ch2_20250707113727_20250707113737_TRUE_EYECLOSED.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "EYECLOSED",
+      "prediction": "NORMAL",
+      "assessment": "FN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 10.0,
+      "confidence": 0.85
+    },
+    {
+      "video": "862430065949485_ch2_20250707114123_20250707114132_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 49.0,
+      "confidence": 0.8
+    },
+    {
+      "video": "867395073503654_ch2_20250707113644_20250707113654_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 42.0,
+      "confidence": 0.8
+    },
+    {
+      "video": "862430062064965_ch2_20250707114127_20250707114137_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 26.4,
+      "confidence": 0.775
+    },
+    {
+      "video": "862430062506247_ch2_20250707114126_20250707114136_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 22.5,
+      "confidence": 0.85
+    },
+    {
+      "video": "862430064483924_ch2_20250707113600_20250707113610_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 51.3,
+      "confidence": 0.85
+    }
+  ]
+}
