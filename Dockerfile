@@ -1,6 +1,8 @@
 # Multi-stage build for GPU-accelerated landmark detection
+ARG BUILD_TYPE=gpu
+
 # Stage 1: CUDA base image for GPU support
-FROM nvidia/cuda:12.4-devel-ubuntu22.04 as gpu-base
+FROM nvidia/cuda:12.4-devel-ubuntu22.04 AS gpu-base
 
 # Install Python 3.11 and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -32,7 +34,7 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
 # Stage 2: CPU-only fallback image
-FROM python:3.11-slim as cpu-base
+FROM python:3.11-slim AS cpu-base
 
 # Install system dependencies for landmark detection (CPU-only)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -53,8 +55,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Stage 3: Final image (defaults to GPU, can be overridden)
-ARG BUILD_TYPE=gpu
-FROM ${BUILD_TYPE}-base as final
+FROM ${BUILD_TYPE}-base AS final
+
+# To use the build argument within this stage, you must redeclare it without a value.
+ARG BUILD_TYPE
 
 # Set working directory
 WORKDIR /app
