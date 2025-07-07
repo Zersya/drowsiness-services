@@ -48,6 +48,16 @@ RUN if [ ! -f shape_predictor_68_face_landmarks.dat ]; then \
     bunzip2 shape_predictor_68_face_landmarks.dat.bz2; \
     fi
 
+# Set environment variables for landmark system
+ENV ENABLE_ADAPTIVE_THRESHOLDS=true
+ENV FORCE_ADAPTIVE_THRESHOLDS=false
+
+ENV LOG_LEVEL=INFO
+ENV LOG_FILE=landmark_detection.log
+
+ENV ENABLE_GPU_ACCELERATION=false
+ENV GPU_DEVICE=0
+
 # Landmark API configuration
 ENV LANDMARK_PORT=${LANDMARK_PORT:-8003}
 ENV LANDMARK_HOST=0.0.0.0

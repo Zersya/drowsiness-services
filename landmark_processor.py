@@ -271,8 +271,34 @@ class LandmarkDrowsinessProcessor:
         # Initialize the integrated FatigueDetectionSystem
         self.fatigue_system = FatigueDetectionSystem()
 
+        # Apply adaptive thresholds if available
+        self._apply_adaptive_thresholds()
+
         # Processing parameters
         self.frame_skip = int(os.getenv('LANDMARK_FRAME_SKIP', '2'))  # Process every nth frame for performance
+
+    def _apply_adaptive_thresholds(self):
+        """Apply adaptive optimization results to the fatigue detection system"""
+        try:
+            # Import here to avoid circular imports
+            from adaptive_threshold_integration import apply_adaptive_thresholds, enable_adaptive_thresholds_via_env
+
+            # Check if adaptive thresholds should be enabled
+            if enable_adaptive_thresholds_via_env() or os.getenv('FORCE_ADAPTIVE_THRESHOLDS', 'false').lower() == 'true':
+                success = apply_adaptive_thresholds(self.fatigue_system)
+                if success:
+                    logging.info("🎯 Adaptive thresholds applied to production FatigueDetectionSystem")
+                else:
+                    logging.warning("⚠️ Failed to apply adaptive thresholds, using defaults")
+            else:
+                logging.info("📊 Using default thresholds (adaptive thresholds not enabled)")
+                logging.info("   Set ENABLE_ADAPTIVE_THRESHOLDS=true to enable adaptive optimization results")
+
+        except ImportError:
+            logging.warning("⚠️ Adaptive threshold integration not available, using default thresholds")
+        except Exception as e:
+            logging.error(f"❌ Error applying adaptive thresholds: {e}")
+            logging.info("📊 Falling back to default thresholds")
 
     def _cleanup_temp_file(self, temp_path):
         """Clean up temporary video file."""
