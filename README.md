@@ -6,7 +6,7 @@ This document describes the streamlined Docker configuration for the landmark-ba
 
 ### Landmark Drowsiness Detector
 - **Container**: `landmark-drowsiness-detector`
-- **Port**: 8003
+- **Port**: 8002
 - **Features**: Facial landmark-based detection, PERCLOS analysis, Eye Aspect Ratio (EAR) calculation
 - **Architecture**: CPU-optimized, lightweight Python container
 - **Dependencies**: dlib, OpenCV, Flask, scipy
@@ -44,7 +44,7 @@ LANDMARK_MAX_WORKERS=2 docker-compose up -d
 ### Environment Variables
 
 #### Landmark Service Configuration
-- `LANDMARK_PORT=8003` - API port
+- `LANDMARK_PORT=8002` - API port
 - `LANDMARK_HOST=0.0.0.0` - Bind address
 - `LANDMARK_MAX_WORKERS=1` - Number of worker threads
 - `LANDMARK_QUEUE_CHECK_INTERVAL=5` - Queue check interval in seconds
@@ -66,20 +66,20 @@ LANDMARK_MAX_WORKERS=2 docker-compose up -d
 
 ## API Endpoints
 
-### Landmark Service (Port 8003)
-- `http://localhost:8003/` - API root and system information
-- `http://localhost:8003/api/process` - Video processing endpoint
-- `http://localhost:8003/api/queue/<id>` - Check processing status
-- `http://localhost:8003/api/results` - Get all processed results
-- `http://localhost:8003/api/result/<id>` - Get specific result
-- `http://localhost:8003/api/webhook` - Webhook management
-- `http://localhost:8003/api/download/db` - Download database
-- `http://localhost:8003/api/precision` - Precision metrics
+### Landmark Service (Port 8002)
+- `http://localhost:8002/` - API root and system information
+- `http://localhost:8002/api/process` - Video processing endpoint
+- `http://localhost:8002/api/queue/<id>` - Check processing status
+- `http://localhost:8002/api/results` - Get all processed results
+- `http://localhost:8002/api/result/<id>` - Get specific result
+- `http://localhost:8002/api/webhook` - Webhook management
+- `http://localhost:8002/api/download/db` - Download database
+- `http://localhost:8002/api/precision` - Precision metrics
 
 ## Health Checks
 
 The container includes health checks that verify the landmark service is running:
-- Landmark service: Checks port 8003 every 30 seconds
+- Landmark service: Checks port 8002 every 30 seconds
 
 View health status:
 ```bash
@@ -92,8 +92,8 @@ docker-compose ps
 
 1. **Port conflicts**
    ```bash
-   # Check if port 8003 is in use
-   netstat -tulpn | grep :8003
+   # Check if port 8002 is in use
+   netstat -tulpn | grep :8002
    ```
 
 2. **Memory issues**
@@ -121,7 +121,7 @@ docker-compose logs -f
 docker exec -it landmark-drowsiness-detector bash
 
 # Check landmark system status
-docker exec -it landmark-drowsiness-detector curl http://localhost:8003/
+docker exec -it landmark-drowsiness-detector curl http://localhost:8002/
 ```
 
 ### Performance Tuning

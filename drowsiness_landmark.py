@@ -49,9 +49,20 @@ class FatigueDetectionSystem:
     Main class for fatigue detection system
     """
     
-    def __init__(self):
+    def __init__(self, use_gpu=False):
         """Initialize the fatigue detection system"""
-        self.detector = dlib.get_frontal_face_detector()
+        self.use_gpu = use_gpu
+        if self.use_gpu:
+            try:
+                self.detector = dlib.cnn_face_detection_model_v1("mmod_human_face_detector.dat")
+                print("Using GPU for face detection.")
+            except Exception as e:
+                print(f"Failed to load CNN face detector: {e}")
+                print("Falling back to CPU-based face detector.")
+                self.detector = dlib.get_frontal_face_detector()
+        else:
+            self.detector = dlib.get_frontal_face_detector()
+            print("Using CPU for face detection.")
         self.predictor = None
         self._initialize_predictor()
         
@@ -942,7 +953,7 @@ class FatigueDetectionSystem:
 
 def main(args):
     """Main function to run fatigue detection on a single video."""
-    detector = FatigueDetectionSystem()
+    detector = FatigueDetectionSystem(use_gpu=args.gpu)
     driver_name = os.path.splitext(os.path.basename(args.output_json))[0]
 
     # --- Correctly call the single video analyzer ---
@@ -987,6 +998,7 @@ if __name__ == '__main__':
     parser.add_argument('--rear_video', type=str, help='(Optional) Path to the rear-facing driver video.')
     parser.add_argument('--output_video', type=str, required=True, help='Path to save the output merged video file (e.g., output.mp4).')
     parser.add_argument('--output_json', type=str, required=True, help='Path to save the final JSON report file (e.g., report.json).')
+    parser.add_argument('--gpu', action='store_true', help='Enable GPU acceleration.')
     
     parsed_args = parser.parse_args()
     main(parsed_args)

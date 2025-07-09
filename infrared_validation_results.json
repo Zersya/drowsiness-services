@@ -1,25 +1,35 @@
 {
-  "timestamp": "2025-07-07 13:34:01",
+  "timestamp": "2025-07-09 10:38:48",
   "system_version": "infrared_optimized_v1.0",
   "precision_target": 0.9,
   "summary": {
-    "total_videos_analyzed": 28,
-    "total_videos_with_ground_truth": 28,
+    "total_videos_analyzed": 51,
+    "total_videos_with_ground_truth": 51,
     "confusion_matrix": {
-      "TP": 11,
-      "FP": 15,
-      "TN": 1,
-      "FN": 1
+      "TP": 16,
+      "FP": 19,
+      "TN": 11,
+      "FN": 5
     },
     "metrics": {
-      "accuracy": 0.42857142857142855,
-      "precision": 0.4230769230769231,
-      "recall": 0.9166666666666666,
-      "f1_score": 0.5789473684210527
+      "accuracy": 0.5294117647058824,
+      "precision": 0.45714285714285713,
+      "recall": 0.7619047619047619,
+      "f1_score": 0.5714285714285714
     },
     "precision_target_achieved": false
   },
   "detailed_results": [
+    {
+      "video": "867395073640514_ch2_20250708142954_20250708143004_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 46.2,
+      "confidence": 0.775
+    },
     {
       "video": "862430062032285_ch2_20250707114124_20250707114134_FALSE_LOOKDOWN.mp4",
       "ground_truth": "NORMAL",
@@ -29,6 +39,16 @@
       "is_fatigue_predicted": true,
       "fatigue_percentage": 28.75,
       "confidence": 0.85
+    },
+    {
+      "video": "867395078916174_ch2_20250708142802_20250708142812_FALSE_LAUGH.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LAUGH",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 27.0,
+      "confidence": 0.8
     },
     {
       "video": "862430065877926_ch2_20250707114126_20250707114136_TRUE_YAWNING.mp4",
@@ -74,10 +94,20 @@
       "video": "862430062067463_ch2_20250707112939_20250707112949_FALSE_RADIOUSE.mp4",
       "ground_truth": "NORMAL",
       "ground_truth_label": "RADIOUSE",
-      "prediction": "FATIGUE",
-      "assessment": "FP",
-      "is_fatigue_predicted": true,
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
       "fatigue_percentage": 22.5,
+      "confidence": 0.775
+    },
+    {
+      "video": "862430062024563_ch2_20250708142557_20250708142607_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 38.5,
       "confidence": 0.775
     },
     {
@@ -99,6 +129,16 @@
       "is_fatigue_predicted": true,
       "fatigue_percentage": 27.0,
       "confidence": 0.85
+    },
+    {
+      "video": "867395078831407_ch2_20250708142531_20250708142541_TRUE_EYECLOSED.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "EYECLOSED",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 27.0,
+      "confidence": 0.775
     },
     {
       "video": "862430062066481_ch2_20250707113719_20250707113729_FALSE_LOOKDOWN.mp4",
@@ -141,13 +181,23 @@
       "confidence": 0.8
     },
     {
+      "video": "867395076519640_ch2_20250708142634_20250708142644_FALSE_TALKING.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "TALKING",
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 22.5,
+      "confidence": 0.8
+    },
+    {
       "video": "862430065982221_ch2_20250707113554_20250707113604_TRUE_YAWNING.mp4",
       "ground_truth": "FATIGUE",
       "ground_truth_label": "YAWNING",
-      "prediction": "FATIGUE",
-      "assessment": "TP",
-      "is_fatigue_predicted": true,
-      "fatigue_percentage": 30,
+      "prediction": "NORMAL",
+      "assessment": "FN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 10.0,
       "confidence": 0.725
     },
     {
@@ -161,13 +211,33 @@
       "confidence": 0.85
     },
     {
+      "video": "867395078834849_ch2_20250708142525_20250708142535_FALSE_EAT.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "EAT",
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 21.0,
+      "confidence": 0.85
+    },
+    {
       "video": "867395078102692_ch2_20250707112703_20250707112713_FALSE_LOOKDOWN.mp4",
       "ground_truth": "NORMAL",
       "ground_truth_label": "LOOKDOWN",
-      "prediction": "FATIGUE",
-      "assessment": "FP",
-      "is_fatigue_predicted": true,
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
       "fatigue_percentage": 22.0,
+      "confidence": 0.85
+    },
+    {
+      "video": "862430062297110_ch2_20250708142948_20250708142958_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 43.8,
       "confidence": 0.85
     },
     {
@@ -177,8 +247,28 @@
       "prediction": "FATIGUE",
       "assessment": "TP",
       "is_fatigue_predicted": true,
-      "fatigue_percentage": 64.5,
+      "fatigue_percentage": 34.5,
       "confidence": 0.825
+    },
+    {
+      "video": "867395073624955_ch2_20250708143000_20250708143010_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "NORMAL",
+      "assessment": "FN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 12.0,
+      "confidence": 0.725
+    },
+    {
+      "video": "862430062031964_ch2_20250708142705_20250708142715_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 27.0,
+      "confidence": 0.9
     },
     {
       "video": "862430062555897_ch2_20250707113725_20250707113735_TRUE_EYECLOSED.mp4",
@@ -191,6 +281,26 @@
       "confidence": 0.9
     },
     {
+      "video": "862430062297367_ch2_20250708142713_20250708142723_FALSE_NORMAL.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "NORMAL",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 30.0,
+      "confidence": 0.85
+    },
+    {
+      "video": "862430062039496_ch2_20250708143000_20250708143009_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "NORMAL",
+      "assessment": "FN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 22.0,
+      "confidence": 0.775
+    },
+    {
       "video": "862430065910040_ch2_20250707113605_20250707113615_FALSE_LOOKDOWN.mp4",
       "ground_truth": "NORMAL",
       "ground_truth_label": "LOOKDOWN",
@@ -201,12 +311,42 @@
       "confidence": 0.85
     },
     {
-      "video": "862430065970580_ch2_20250707114053_20250707114103_FALSE_SMOKING.mp4",
+      "video": "862430064530740_ch2_20250708142907_20250708142917_FALSE_LOOKDOWN.mp4",
       "ground_truth": "NORMAL",
-      "ground_truth_label": "SMOKING",
+      "ground_truth_label": "LOOKDOWN",
       "prediction": "FATIGUE",
       "assessment": "FP",
       "is_fatigue_predicted": true,
+      "fatigue_percentage": 41.4,
+      "confidence": 0.9
+    },
+    {
+      "video": "862430062063611_ch2_20250708142545_20250708142555_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 43.2,
+      "confidence": 0.85
+    },
+    {
+      "video": "867395073643351_ch2_20250708142634_20250708142644_TRUE_EYECLOSED.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "EYECLOSED",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 34.5,
+      "confidence": 0.8
+    },
+    {
+      "video": "862430065970580_ch2_20250707114053_20250707114103_FALSE_SMOKING.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "SMOKING",
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
       "fatigue_percentage": 22.5,
       "confidence": 0.85
     },
@@ -221,6 +361,16 @@
       "confidence": 0.85
     },
     {
+      "video": "867395078809791_ch2_20250708142638_20250708142648_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 22.0,
+      "confidence": 0.775
+    },
+    {
       "video": "862430065949485_ch2_20250707114123_20250707114132_FALSE_LOOKDOWN.mp4",
       "ground_truth": "NORMAL",
       "ground_truth_label": "LOOKDOWN",
@@ -231,6 +381,16 @@
       "confidence": 0.8
     },
     {
+      "video": "862430062533811_ch2_20250708142951_20250708143001_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 22.5,
+      "confidence": 0.725
+    },
+    {
       "video": "867395076630629_ch2_20250707112656_20250707112706_TRUE_YAWNING.mp4",
       "ground_truth": "FATIGUE",
       "ground_truth_label": "YAWNING",
@@ -239,6 +399,26 @@
       "is_fatigue_predicted": true,
       "fatigue_percentage": 45.0,
       "confidence": 0.85
+    },
+    {
+      "video": "862430065846384_ch2_20250708142648_20250708142658_FALSE_TALKING.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "TALKING",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 34.5,
+      "confidence": 0.85
+    },
+    {
+      "video": "867395078860166_ch2_20250708142649_20250708142659_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 42.0,
+      "confidence": 0.8
     },
     {
       "video": "862430065909695_ch2_20250707112651_20250707112701_TRUE_EYECLOSED.mp4",
@@ -254,10 +434,20 @@
       "video": "867395073640498_ch2_20250707112909_20250707112919_FALSE_EAT.mp4",
       "ground_truth": "NORMAL",
       "ground_truth_label": "EAT",
-      "prediction": "FATIGUE",
-      "assessment": "FP",
-      "is_fatigue_predicted": true,
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
       "fatigue_percentage": 22.0,
+      "confidence": 0.8
+    },
+    {
+      "video": "865847058987502_ch2_20250708142550_20250708142600_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 22.5,
       "confidence": 0.8
     },
     {
@@ -281,12 +471,22 @@
       "confidence": 0.775
     },
     {
+      "video": "862430062061276_ch2_20250708142540_20250708142550_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "TP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 26.4,
+      "confidence": 0.775
+    },
+    {
       "video": "862430062506247_ch2_20250707114126_20250707114136_FALSE_LOOKDOWN.mp4",
       "ground_truth": "NORMAL",
       "ground_truth_label": "LOOKDOWN",
-      "prediction": "FATIGUE",
-      "assessment": "FP",
-      "is_fatigue_predicted": true,
+      "prediction": "NORMAL",
+      "assessment": "TN",
+      "is_fatigue_predicted": false,
       "fatigue_percentage": 22.5,
       "confidence": 0.85
     },
@@ -299,6 +499,36 @@
       "is_fatigue_predicted": true,
       "fatigue_percentage": 43.8,
       "confidence": 0.85
+    },
+    {
+      "video": "867395078841737_ch2_20250708142644_20250708142654_FALSE_LOOKDOWN.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "LOOKDOWN",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 28.75,
+      "confidence": 0.8
+    },
+    {
+      "video": "867395073503654_ch2_20250708142716_20250708142726_FALSE_YAWNING.mp4",
+      "ground_truth": "NORMAL",
+      "ground_truth_label": "YAWNING",
+      "prediction": "FATIGUE",
+      "assessment": "FP",
+      "is_fatigue_predicted": true,
+      "fatigue_percentage": 36.0,
+      "confidence": 0.8
+    },
+    {
+      "video": "862430065923928_ch2_20250708142901_20250708142911_TRUE_YAWNING.mp4",
+      "ground_truth": "FATIGUE",
+      "ground_truth_label": "YAWNING",
+      "prediction": "NORMAL",
+      "assessment": "FN",
+      "is_fatigue_predicted": false,
+      "fatigue_percentage": 22.0,
+      "confidence": 0.8
     }
   ]
 }

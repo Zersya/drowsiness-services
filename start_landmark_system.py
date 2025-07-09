@@ -10,10 +10,11 @@ Usage:
     python start_landmark_system.py [options]
 
 Options:
-    --port PORT         Port to run the server on (default: 8003)
+    --port PORT         Port to run the server on (default: 8002)
     --workers N         Number of worker threads (default: 1)
     --debug             Enable debug mode
     --config FILE       Path to configuration file (default: .env)
+    --gpu               Enable GPU acceleration
 """
 
 import os
@@ -61,7 +62,7 @@ def check_dependencies():
     print("✅ All required dependencies are installed")
     return True
 
-def check_model_files():
+def check_model_files(use_gpu=False):
     """Check if required model files are available."""
     predictor_path = "shape_predictor_68_face_landmarks.dat"
     
@@ -72,6 +73,15 @@ def check_model_files():
     else:
         print("✅ Facial landmark predictor found")
     
+    if use_gpu:
+        cnn_face_detector_path = "mmod_human_face_detector.dat"
+        if not os.path.exists(cnn_face_detector_path):
+            print(f"⚠️  CNN face detector model not found at {cnn_face_detector_path}")
+            print("Please download it from http://dlib.net/files/mmod_human_face_detector.dat.bz2")
+            return False
+        else:
+            print("✅ CNN face detector model found")
+    
     return True
 
 def main():
@@ -79,14 +89,16 @@ def main():
     parser = argparse.ArgumentParser(
         description='Start the Landmark-based Drowsiness Detection System'
     )
-    parser.add_argument('--port', type=int, default=8003,
-                       help='Port to run the server on (default: 8003)')
+    parser.add_argument('--port', type=int, default=8002,
+                       help='Port to run the server on (default: 8002)')
     parser.add_argument('--workers', type=int, default=1,
                        help='Number of worker threads (default: 1)')
     parser.add_argument('--debug', action='store_true',
                        help='Enable debug mode')
     parser.add_argument('--config', default='.env',
                        help='Path to configuration file (default: .env)')
+    parser.add_argument('--gpu', action='store_true',
+                        help='Enable GPU acceleration')
     
     args = parser.parse_args()
     
@@ -112,17 +124,21 @@ def main():
         sys.exit(1)
     
     # Check model files
-    if not check_model_files():
+    if not check_model_files(args.gpu):
         sys.exit(1)
     
     print(f"🌐 Server will start on port {args.port}")
     print(f"👥 Using {args.workers} worker thread(s)")
     print(f"🔧 Debug mode: {'enabled' if args.debug else 'disabled'}")
+    print(f"🚀 GPU acceleration: {'enabled' if args.gpu else 'disabled'}")
     print("=" * 60)
     
     try:
         # Import and start the landmark API
-        from landmark_api import app
+        from landmark_api import app, worker
+        
+        # Pass GPU flag to worker
+        worker.processor.fatigue_system.use_gpu = args.gpu
         
         print("✅ Landmark system modules loaded successfully")
         print("🎯 Starting Flask server...")

@@ -335,7 +335,7 @@ def main():
     # Initialize optimizer
     optimizer = AdaptiveThresholdOptimizer(
         target_precision=0.90,
-        max_iterations=30
+        max_iterations=50
     )
     
     # Run optimization

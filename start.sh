@@ -14,7 +14,7 @@ chmod -R 777 /app/data
 chmod -R 777 /app/logs
 echo "Data directories created and permissions set"
 
-echo "Starting landmark system with worker support (LANDMARK_MAX_WORKERS=${LANDMARK_MAX_WORKERS:-1})..."
+echo "Starting landmark system with worker support (LANDMARK_MAX_WORKERS=${LANDMARK_MAX_WORKERS:-35})..."
 
 # Set environment variables to optimize for landmark processing
 export PYTHONTHREADDEBUG=1
@@ -112,7 +112,7 @@ trap 'handle_signal SIGINT' SIGINT   # Handle interrupt signal (Ctrl+C)
 echo "Starting landmark system process..."
 
 echo "Starting landmark system..."
-python start_landmark_system.py --port ${LANDMARK_PORT:-8003} --workers ${LANDMARK_MAX_WORKERS:-1} &
+python start_landmark_system.py --port ${LANDMARK_PORT:-8002} --workers ${LANDMARK_MAX_WORKERS:-1} &
 PID_LANDMARK=$!
 echo "landmark system started with PID: $PID_LANDMARK"
 

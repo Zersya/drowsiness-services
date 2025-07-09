@@ -28,11 +28,15 @@ services:
       - LANDMARK_PERCLOS_THRESHOLD=0.30
       - LANDMARK_FATIGUE_THRESHOLD=0.60
       - LANDMARK_PERCLOS_WINDOW_SECONDS=1.5
+      - NVIDIA_VISIBLE_DEVICES=all # Expose all GPUs to the container
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility # Enable compute and utility capabilities
     deploy:
       resources:
         reservations:
-          cpus: '2'
-          memory: 4G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     init: true
     stop_signal: SIGINT
     stop_grace_period: 30s

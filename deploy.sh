@@ -84,7 +84,7 @@ create_directories() {
 check_ports() {
     print_status "Checking port availability..."
 
-    PORT=8003
+    PORT=8002
     if netstat -tuln 2>/dev/null | grep -q ":$PORT "; then
         print_error "Port $PORT is already in use. Please stop the service using this port."
         exit 1
@@ -110,7 +110,7 @@ wait_for_services() {
     local attempt=1
 
     while [ $attempt -le $max_attempts ]; do
-        if curl -f http://localhost:8003/ &> /dev/null; then
+        if curl -f http://localhost:8002/ &> /dev/null; then
             print_success "Landmark service is healthy and ready"
             return 0
         fi
@@ -130,13 +130,13 @@ show_status() {
 
     echo ""
     print_status "Service URL:"
-    echo "  Landmark API: http://localhost:8003"
+    echo "  Landmark API: http://localhost:8002"
 
     echo ""
     print_status "API Endpoints:"
-    echo "  Process Video: http://localhost:8003/api/process"
-    echo "  Get Results: http://localhost:8003/api/results"
-    echo "  Webhook Management: http://localhost:8003/api/webhook"
+    echo "  Process Video: http://localhost:8002/api/process"
+    echo "  Get Results: http://localhost:8002/api/results"
+    echo "  Webhook Management: http://localhost:8002/api/webhook"
 
     echo ""
     print_status "To view logs:"

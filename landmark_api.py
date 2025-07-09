@@ -51,7 +51,7 @@ logging.basicConfig(
 load_dotenv()
 
 # Configuration
-PORT = int(os.getenv('LANDMARK_PORT', 8003))
+PORT = int(os.getenv('LANDMARK_PORT', 8002))
 MAX_WORKERS = int(os.getenv('LANDMARK_MAX_WORKERS', 1))
 QUEUE_CHECK_INTERVAL = int(os.getenv('LANDMARK_QUEUE_CHECK_INTERVAL', 5))
 DB_PATH = os.getenv("LANDMARK_DB_PATH", "landmark_detection.db")
